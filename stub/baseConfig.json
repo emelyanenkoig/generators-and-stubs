@@ -1,0 +1,20 @@
+{
+  "paths" : [
+    {
+      "path": "/",
+      "responseSet": {
+        "choice": "Round-robin | weight",
+        "responses": [
+          {
+            "weight": 0,
+            "delay": 0,
+            "headers": {
+              "content-type" : "text/html"
+            },
+            "body": "keklol"
+          }
+        ]
+      }
+    }
+  ]
+}

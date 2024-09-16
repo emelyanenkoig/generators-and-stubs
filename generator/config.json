@@ -1,0 +1,14 @@
+{
+  "requests": [
+    {
+      "url": "http://localhost:8080/",
+      "method": "GET",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": "",
+      "threads": 5,
+      "duration": 20
+    }
+  ]
+}
