@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	"encoding/json"
@@ -6,20 +6,20 @@ import (
 	"time"
 )
 
-// HTTP handler to get the current server configuration
-func (c *ControlServer) getServerConfigHandler(w http.ResponseWriter, r *http.Request) {
+// HTTP handler to get the current Server configuration
+func (c *ControlServer) GetServerConfigHandler(w http.ResponseWriter, r *http.Request) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
 	w.Header().Set("Content-Type", "application/json")
-	err := json.NewEncoder(w).Encode(c.config)
+	err := json.NewEncoder(w).Encode(c.Config)
 	if err != nil {
 		return
 	}
 }
 
-// HTTP handler to update the server configuration
-func (c *ControlServer) updateServerConfigHandler(w http.ResponseWriter, r *http.Request) {
+// HTTP handler to update the Server configuration
+func (c *ControlServer) UpdateServerConfigHandler(w http.ResponseWriter, r *http.Request) {
 	var newConfig ServerConfig
 	decoder := json.NewDecoder(r.Body)
 	err := decoder.Decode(&newConfig)
@@ -29,76 +29,76 @@ func (c *ControlServer) updateServerConfigHandler(w http.ResponseWriter, r *http
 	}
 
 	c.mu.Lock()
-	c.config = newConfig
+	c.Config = newConfig
 	c.mu.Unlock()
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("The configuration has been successfully applied"))
 }
 
-// HTTP handler to delete the server configuration
-func (c *ControlServer) deleteServerConfigHandler(w http.ResponseWriter, r *http.Request) {
+// HTTP handler to delete the Server configuration
+func (c *ControlServer) DeleteServerConfigHandler(w http.ResponseWriter, r *http.Request) {
 	c.mu.Lock()
-	c.config = ServerConfig{} // Reset to default empty config
+	c.Config = ServerConfig{} // Reset to default empty Config
 	c.mu.Unlock()
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Configuration deleted successfully"))
 }
 
-// HTTP handler to start the managed server (enabling request handling)
-func (c *ControlServer) startServerHandler(w http.ResponseWriter, r *http.Request) {
+// HTTP handler to start the managed Server (enabling request handling)
+func (c *ControlServer) StartServerHandler(w http.ResponseWriter, r *http.Request) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if c.server.running {
+	if c.Server.running {
 		http.Error(w, "Server already running", http.StatusBadRequest)
 		return
 	}
 
-	c.server.running = true
+	c.StartTime = time.Now()
+	c.Server.running = true
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Server started successfully"))
 }
 
-// HTTP handler to stop the managed server (disabling request handling)
-func (c *ControlServer) stopServerHandler(w http.ResponseWriter, r *http.Request) {
+// HTTP handler to stop the managed Server (disabling request handling)
+func (c *ControlServer) StopServerHandler(w http.ResponseWriter, r *http.Request) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if !c.server.running {
+	if !c.Server.running {
 		http.Error(w, "Server is not running", http.StatusBadRequest)
 		return
 	}
-
-	c.server.running = false
+	defer r.Body.Close()
+	c.Server.running = false
+	c.ReqCount = 0
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Server stopped successfully"))
 }
 
-func (c *ControlServer) statusServerHandler(w http.ResponseWriter, r *http.Request) {
+func (c *ControlServer) StatusServerHandler(w http.ResponseWriter, r *http.Request) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	// Рассчитываем среднюю задержку (latency)
-	var totalLatency time.Duration
-	for i := 1; i < len(c.requestTimes); i++ {
-		totalLatency += c.requestTimes[i].Sub(c.requestTimes[i-1])
-	}
-	var avgLatency float64
-	if len(c.requestTimes) > 1 {
-		avgLatency = float64(totalLatency.Milliseconds()) / float64(len(c.requestTimes)-1)
-	}
+	seconds := time.Since(c.StartTime).Seconds()
+
+	c.TpsMu.Lock()
+	defer c.TpsMu.Unlock()
+	tps := c.ReqCount / int(seconds)
 
 	// Формируем ответ в JSON формате
 	status := struct {
 		Running    bool    `json:"running"`
-		TPS        float64 `json:"tps"`
+		TPS        int     `json:"tps"`
 		AvgLatency float64 `json:"avg_latency"` // В миллисекундах
+		Duruation  float64 `json:"druation"`
 	}{
-		Running:    c.server.running,
-		TPS:        c.lastTps,
-		AvgLatency: avgLatency,
+		Running:    c.Server.running,
+		TPS:        tps,
+		AvgLatency: 1,
+		Duruation:  float64(seconds),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -106,14 +106,14 @@ func (c *ControlServer) statusServerHandler(w http.ResponseWriter, r *http.Reque
 }
 
 // Handler for processing requests on configured routes
-func (c *ControlServer) routeHandler(w http.ResponseWriter, r *http.Request) {
+func (c *ControlServer) RouteHandler(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
 	c.mu.RLock() // Lock for reading the configuration
 	defer c.mu.RUnlock()
 
-	for _, pathConfig := range c.config.Paths {
+	for _, pathConfig := range c.Config.Paths {
 		if pathConfig.Path == path {
-			response := c.selectResponse(pathConfig.ResponseSet) // Select response (round-robin or weighted)
+			response := c.SelectResponse(pathConfig.ResponseSet) // Select response (round-robin or weighted)
 			for key, value := range response.Headers {
 				w.Header().Set(key, value)
 			}

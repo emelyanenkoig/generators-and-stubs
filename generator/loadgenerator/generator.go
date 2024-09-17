@@ -4,15 +4,18 @@ import (
 	"context"
 	"fmt"
 	c "gns/generator/config"
+	"io"
 	"log"
 	"net/http"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
 type LoadGenerator struct {
-	config *c.Config
+	config       *c.Config
+	mu           sync.Mutex
+	countFailure int
+	countSuccess int
 }
 
 func NewLoadGenerator(config *c.Config) *LoadGenerator {
@@ -39,17 +42,19 @@ func (lg *LoadGenerator) runLoadTest(reqConfig c.RequestConfig) {
 	}
 
 	wg.Wait()
+	fmt.Printf("\nCount of Failed: %v\n", lg.countFailure)
+	fmt.Printf("\nCount of Success: %v\n", lg.countSuccess)
 }
 
 func (lg *LoadGenerator) sendRequests(ctx context.Context, reqConfig c.RequestConfig) {
 	transport := &http.Transport{
-		MaxIdleConnsPerHost: 100,
-		MaxIdleConns:        100,
-		IdleConnTimeout:     90 * time.Second,
+		MaxIdleConnsPerHost: 50000,
+		MaxIdleConns:        50000,
+		IdleConnTimeout:     100 * time.Second,
 	}
 	client := &http.Client{
 		Transport: transport,
-		Timeout:   10 * time.Second,
+		Timeout:   30 * time.Second,
 	}
 	req, err := http.NewRequest(reqConfig.Method, reqConfig.URL, nil) // Add body if needed
 	if err != nil {
@@ -61,28 +66,27 @@ func (lg *LoadGenerator) sendRequests(ctx context.Context, reqConfig c.RequestCo
 		req.Header.Set(k, v)
 	}
 
-	var counter atomic.Int32
-	var counterSuccess atomic.Int32
-
 	for {
 		select {
 		case <-ctx.Done():
-			fmt.Printf("\nCount of Failed: %v\n", counter.Load())
-			fmt.Printf("\nCount of Success: %v\n", counterSuccess.Load())
-
 			return
 		default:
 			start := time.Now()
 			resp, err := client.Do(req)
+			defer resp.Body.Close()
+			_, _ = io.ReadAll(resp.Body)
 			duration := time.Since(start)
 
 			if err != nil {
 				log.Printf("Request failed: %v\n", err)
-				counter.Add(1)
+				lg.mu.Lock()
+				lg.countFailure++
+				lg.mu.Unlock()
 			} else {
 				log.Printf("Response Status: %s, Time: %v\n", resp.Status, duration)
-				resp.Body.Close()
-				counterSuccess.Add(1)
+				lg.mu.Lock()
+				lg.countSuccess++
+				lg.mu.Unlock()
 			}
 
 			// Send metrics to MetricsCollector
