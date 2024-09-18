@@ -1,36 +1,40 @@
 package server
 
 import (
+	"encoding/json"
+	"net/http"
+	"os"
 	"sync"
 	"time"
 )
 
+// ControlServer TODO либо начинаем отсчет TPS Latency с запуска
 type ControlServer struct {
-	Config    ServerConfig
-	Server    *ManagedServer
-	StartTime time.Time
-	ReqCount  int
-	mu        sync.RWMutex
-	TpsMu     sync.Mutex
+	mu            sync.RWMutex
+	Config        ServerConfig
+	RRobinIndex   map[string]int
+	Server        ManagedServer
+	ControlServer *http.Server
+	ReqCount      int
+	TpsMu         sync.Mutex
+	StartTime     time.Time
 }
 
-// InitManagedServer инициализирует управляемый сервер на основе типа сервера
-func (cs *ControlServer) InitManagedServer(serverType string) error {
-	var managedServer ManagedServerInterface
-
-	switch serverType {
-	case "gin":
-		managedServer = NewGinServer(cs)
-	case "fasthttp":
-		managedServer = NewFastHTTPServer(cs)
-	default:
-		managedServer = NewNetHTTPServer(cs)
+func NewControlServer() *ControlServer {
+	return &ControlServer{
+		Config:      ServerConfig{},
+		RRobinIndex: make(map[string]int),
 	}
+}
 
-	if err := managedServer.Init(); err != nil {
+// Load initial Server configuration from file
+func (c *ControlServer) LoadServerConfig(filePath string) error {
+	file, err := os.Open(filePath)
+	if err != nil {
 		return err
 	}
+	defer file.Close()
 
-	go managedServer.Start()
-	return nil
+	decoder := json.NewDecoder(file)
+	return decoder.Decode(&c.Config)
 }

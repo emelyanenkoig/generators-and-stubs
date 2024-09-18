@@ -7,7 +7,7 @@
         "Content-Type": "application/json"
       },
       "body": "1",
-      "threads": 2,
+      "threads": 10,
       "duration": 60
     }
   ]

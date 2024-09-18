@@ -5,10 +5,6 @@ import (
 	"net/http"
 )
 
-type NetHTTPServer struct {
-	cs *ControlServer
-}
-
 func NewNetHTTPServer(cs *ControlServer) ManagedServerInterface {
 	return &NetHTTPServer{cs: cs}
 }
