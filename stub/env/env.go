@@ -8,6 +8,7 @@ type Environment struct {
 	ControlServerPort string
 	Addr              string
 	LogLevel          string
+	ManagedServerType string
 }
 
 func ReadENV() Environment {
@@ -17,6 +18,7 @@ func ReadENV() Environment {
 	f.ServerPort = os.Getenv("SERVER_PORT")
 	f.Addr = os.Getenv("ADDR")
 	f.LogLevel = os.Getenv("LOG_LEVEL")
+	f.ManagedServerType = os.Getenv("MANAGED_SERVER_TYPE")
 
 	return f
 }

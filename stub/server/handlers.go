@@ -6,20 +6,20 @@ import (
 	"time"
 )
 
-// HTTP handler to get the current Server configuration
-func (c *ControlServer) GetServerConfigHandler(w http.ResponseWriter, r *http.Request) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+// HTTP handler to get the current ManagedServer configuration
+func (cs *ControlServer) GetServerConfigHandler(w http.ResponseWriter, r *http.Request) {
+	cs.mu.RLock()
+	defer cs.mu.RUnlock()
 
 	w.Header().Set("Content-Type", "application/json")
-	err := json.NewEncoder(w).Encode(c.Config)
+	err := json.NewEncoder(w).Encode(cs.Config)
 	if err != nil {
 		return
 	}
 }
 
-// HTTP handler to update the Server configuration
-func (c *ControlServer) UpdateServerConfigHandler(w http.ResponseWriter, r *http.Request) {
+// HTTP handler to update the ManagedServer configuration
+func (cs *ControlServer) UpdateServerConfigHandler(w http.ResponseWriter, r *http.Request) {
 	var newConfig ServerConfig
 	decoder := json.NewDecoder(r.Body)
 	err := decoder.Decode(&newConfig)
@@ -28,65 +28,65 @@ func (c *ControlServer) UpdateServerConfigHandler(w http.ResponseWriter, r *http
 		return
 	}
 
-	c.mu.Lock()
-	c.Config = newConfig
-	c.mu.Unlock()
+	cs.mu.Lock()
+	cs.Config = newConfig
+	cs.mu.Unlock()
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("The configuration has been successfully applied"))
 }
 
-// HTTP handler to delete the Server configuration
-func (c *ControlServer) DeleteServerConfigHandler(w http.ResponseWriter, r *http.Request) {
-	c.mu.Lock()
-	c.Config = ServerConfig{} // Reset to default empty Config
-	c.mu.Unlock()
+// HTTP handler to delete the ManagedServer configuration
+func (cs *ControlServer) DeleteServerConfigHandler(w http.ResponseWriter, r *http.Request) {
+	cs.mu.Lock()
+	cs.Config = ServerConfig{} // Reset to default empty Config
+	cs.mu.Unlock()
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Configuration deleted successfully"))
 }
 
-// HTTP handler to start the managed Server (enabling request handling)
-func (c *ControlServer) StartServerHandler(w http.ResponseWriter, r *http.Request) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+// HTTP handler to start the managed ManagedServer (enabling request handling)
+func (cs *ControlServer) StartServerHandler(w http.ResponseWriter, r *http.Request) {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
 
-	if c.Server.running {
-		http.Error(w, "Server already running", http.StatusBadRequest)
+	if cs.ManagedServer.IsRunning() {
+		http.Error(w, "ManagedServer already running", http.StatusBadRequest)
 		return
 	}
 
-	c.StartTime = time.Now()
-	c.Server.running = true
+	cs.StartTime = time.Now()
+	cs.ManagedServer.SetRunning(true)
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Server started successfully"))
+	w.Write([]byte("ManagedServer started successfully"))
 }
 
-// HTTP handler to stop the managed Server (disabling request handling)
-func (c *ControlServer) StopServerHandler(w http.ResponseWriter, r *http.Request) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+// HTTP handler to stop the managed ManagedServer (disabling request handling)
+func (cs *ControlServer) StopServerHandler(w http.ResponseWriter, r *http.Request) {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
 
-	if !c.Server.running {
-		http.Error(w, "Server is not running", http.StatusBadRequest)
+	if !cs.ManagedServer.IsRunning() {
+		http.Error(w, "ManagedServer is not running", http.StatusBadRequest)
 		return
 	}
 	defer r.Body.Close()
-	c.Server.running = false
-	c.ReqCount = 0
+	cs.ManagedServer.SetRunning(false)
+	cs.ReqCount = 0
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Server stopped successfully"))
+	w.Write([]byte("ManagedServer stopped successfully"))
 }
 
-func (c *ControlServer) StatusServerHandler(w http.ResponseWriter, r *http.Request) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+func (cs *ControlServer) StatusServerHandler(w http.ResponseWriter, r *http.Request) {
+	cs.mu.RLock()
+	defer cs.mu.RUnlock()
 
-	seconds := time.Since(c.StartTime).Seconds()
+	seconds := time.Since(cs.StartTime).Seconds()
 
-	c.TpsMu.Lock()
-	defer c.TpsMu.Unlock()
-	tps := c.ReqCount / int(seconds)
+	cs.TpsMu.Lock()
+	defer cs.TpsMu.Unlock()
+	tps := cs.ReqCount / int(seconds)
 
 	// Формируем ответ в JSON формате
 	status := struct {
@@ -95,7 +95,7 @@ func (c *ControlServer) StatusServerHandler(w http.ResponseWriter, r *http.Reque
 		AvgLatency float64 `json:"avg_latency"` // В миллисекундах
 		Duruation  float64 `json:"druation"`
 	}{
-		Running:    c.Server.running,
+		Running:    cs.ManagedServer.IsRunning(),
 		TPS:        tps,
 		AvgLatency: 1,
 		Duruation:  float64(seconds),
@@ -106,14 +106,14 @@ func (c *ControlServer) StatusServerHandler(w http.ResponseWriter, r *http.Reque
 }
 
 // Handler for processing requests on configured routes
-func (c *ControlServer) RouteHandler(w http.ResponseWriter, r *http.Request) {
+func (cs *ControlServer) RouteHandler(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
-	c.mu.RLock() // Lock for reading the configuration
-	defer c.mu.RUnlock()
+	cs.mu.RLock() // Lock for reading the configuration
+	defer cs.mu.RUnlock()
 
-	for _, pathConfig := range c.Config.Paths {
+	for _, pathConfig := range cs.Config.Paths {
 		if pathConfig.Path == path {
-			response := c.SelectResponse(pathConfig.ResponseSet) // Select response (round-robin or weighted)
+			response := cs.SelectResponse(pathConfig.ResponseSet) // Select response (round-robin or weighted)
 			for key, value := range response.Headers {
 				w.Header().Set(key, value)
 			}

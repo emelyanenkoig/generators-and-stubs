@@ -16,9 +16,9 @@ func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	f := env.ReadENV()
 
-	controlServer := server.NewControlServer()
+	controlServer := server.NewControlServer(f.ManagedServerType)
 
-	// Load the initial Server configuration
+	// Загружаем начальную конфигурацию сервера
 	err := controlServer.LoadServerConfig(fmt.Sprintf("%s", f.ResponseFilePath))
 	if err != nil {
 		log.Fatalf("Error loading Server Config: %v", err)
@@ -28,10 +28,10 @@ func main() {
 	wg.Add(1)
 	go func() {
 		controlServer.InitManagedServer()
+		controlServer.StartManagedServer()
 		wg.Done()
 	}()
 	controlServer.InitControlServer(f)
 
 	wg.Wait()
-
 }

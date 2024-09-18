@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// ServerConfig defines the structure of the Server configuration
+// ServerConfig defines the structure of the ManagedServer configuration
 type ServerConfig struct {
 	Paths []ResponsePath `json:"paths"`
 }
@@ -33,36 +33,20 @@ type Response struct {
 	Body    string            `json:"body"`
 }
 
-type ManagedServer struct {
-	*http.Server
-	running bool
-}
-
 // ControlServer TODO либо начинаем отсчет TPS Latency с запуска
 type ControlServer struct {
 	mu            sync.RWMutex
 	Config        ServerConfig
 	RRobinIndex   map[string]int
-	Server        ManagedServer
+	ManagedServer ManagedServerInterface
 	ControlServer *http.Server
 	ReqCount      int
 	TpsMu         sync.Mutex
 	StartTime     time.Time
 }
 
-func NewControlServer() *ControlServer {
-
-	return &ControlServer{
-		Config: ServerConfig{},
-		Server: ManagedServer{
-			running: true,
-		},
-		RRobinIndex: make(map[string]int),
-	}
-}
-
-// Load initial Server configuration from file
-func (c *ControlServer) LoadServerConfig(filePath string) error {
+// Load initial ManagedServer configuration from file
+func (cs *ControlServer) LoadServerConfig(filePath string) error {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return err
@@ -70,5 +54,5 @@ func (c *ControlServer) LoadServerConfig(filePath string) error {
 	defer file.Close()
 
 	decoder := json.NewDecoder(file)
-	return decoder.Decode(&c.Config)
+	return decoder.Decode(&cs.Config)
 }

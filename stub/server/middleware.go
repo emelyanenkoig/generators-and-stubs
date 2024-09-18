@@ -5,26 +5,26 @@ import (
 	"time"
 )
 
-// Middleware to control access to the managed Server
-func (c *ControlServer) ServerAccessControlMiddleware(next http.Handler) http.Handler {
+// Middleware to control access to the managed ManagedServer
+func (cs *ControlServer) ServerAccessControlMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		c.mu.RLock()
-		defer c.mu.RUnlock()
+		cs.mu.RLock()
+		defer cs.mu.RUnlock()
 
-		if c.StartTime.IsZero() {
-			c.StartTime = time.Now()
+		if cs.StartTime.IsZero() {
+			cs.StartTime = time.Now()
 		}
 
-		if !c.Server.running {
+		if !cs.ManagedServer.IsRunning() {
 			http.Error(w, "Service Unavailable", http.StatusServiceUnavailable)
 			return
 		}
 
 		// Перемещаем обработку метрик в асинхронную горутину
 		go func() {
-			c.TpsMu.Lock()
-			defer c.TpsMu.Unlock()
-			c.ReqCount++
+			cs.TpsMu.Lock()
+			defer cs.TpsMu.Unlock()
+			cs.ReqCount++
 		}()
 
 		next.ServeHTTP(w, r)
