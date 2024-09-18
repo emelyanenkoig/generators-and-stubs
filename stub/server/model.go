@@ -2,10 +2,7 @@ package server
 
 import (
 	"encoding/json"
-	"net/http"
 	"os"
-	"sync"
-	"time"
 )
 
 // ServerConfig defines the structure of the Server configuration
@@ -33,33 +30,36 @@ type Response struct {
 	Body    string            `json:"body"`
 }
 
-type ManagedServer struct {
-	*http.Server
-	running bool
-}
-
-// ControlServer TODO либо начинаем отсчет TPS Latency с запуска
-type ControlServer struct {
-	mu            sync.RWMutex
-	Config        ServerConfig
-	RRobinIndex   map[string]int
-	Server        ManagedServer
-	ControlServer *http.Server
-	ReqCount      int
-	TpsMu         sync.Mutex
-	StartTime     time.Time
-}
-
-func NewControlServer() *ControlServer {
-
-	return &ControlServer{
-		Config: ServerConfig{},
-		Server: ManagedServer{
-			running: true,
-		},
-		RRobinIndex: make(map[string]int),
-	}
-}
+//type ManagedServer struct {
+//	*http.Server
+//	running bool
+//}
+//
+//// ControlServer TODO либо начинаем отсчет TPS Latency с запуска
+//type ControlServer struct {
+//	mu            sync.RWMutex
+//	Config        ServerConfig
+//	RRobinIndex   map[string]int
+//	Server        ManagedServerInterface
+//	ServerType    string
+//	ControlServer *http.Server
+//	ReqCount      int
+//	TpsMu         sync.Mutex
+//	StartTime     time.Time
+//}
+//
+//type ManagedServerInterface interface {
+//	Init() error
+//	Start() error
+//}
+//
+//func NewControlServer(serverType string) *ControlServer {
+//	return &ControlServer{
+//		Config:      ServerConfig{},
+//		ServerType:  serverType,
+//		RRobinIndex: make(map[string]int),
+//	}
+//}
 
 // Load initial Server configuration from file
 func (c *ControlServer) LoadServerConfig(filePath string) error {
