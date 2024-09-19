@@ -20,11 +20,19 @@ func (cs *ControlServer) SelectRoundRobinResponse(responseSet ResponseSet) Respo
 		return Response{}
 	}
 
-	// Lock only around the critical section that modifies the shared RRobinIndex
-	index := cs.RRobinIndex[responseSet.Choice]                                   // Read current index
-	cs.RRobinIndex[responseSet.Choice] = (index + 1) % len(responseSet.Responses) // Update index
+	// Инициализация индекса, если он еще не существует для данного выбора
+	if _, exists := cs.RRobinIndex[responseSet.Choice]; !exists {
+		cs.RRobinIndex[responseSet.Choice] = 0
+	}
 
-	return responseSet.Responses[index] // Return selected response
+	// Получаем текущий индекс
+	index := cs.RRobinIndex[responseSet.Choice]
+
+	// Обновляем индекс для следующего вызова
+	cs.RRobinIndex[responseSet.Choice] = (index + 1) % len(responseSet.Responses)
+
+	// Возвращаем выбранный ответ
+	return responseSet.Responses[index]
 }
 
 // Weighted random selection

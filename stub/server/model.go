@@ -8,6 +8,18 @@ import (
 	"time"
 )
 
+// ControlServer TODO либо начинаем отсчет TPS Latency с запуска
+type ControlServer struct {
+	mu            sync.RWMutex
+	Config        ServerConfig
+	RRobinIndex   map[string]int
+	ManagedServer ManagedServerInterface
+	ControlServer *http.Server
+	ReqCount      int
+	TpsMu         sync.Mutex
+	StartTime     time.Time
+}
+
 // ServerConfig defines the structure of the ManagedServer configuration
 type ServerConfig struct {
 	Paths []ResponsePath `json:"paths"`
@@ -31,18 +43,6 @@ type Response struct {
 	Delay   int               `json:"delay"` // in milliseconds
 	Headers map[string]string `json:"headers"`
 	Body    string            `json:"body"`
-}
-
-// ControlServer TODO либо начинаем отсчет TPS Latency с запуска
-type ControlServer struct {
-	mu            sync.RWMutex
-	Config        ServerConfig
-	RRobinIndex   map[string]int
-	ManagedServer ManagedServerInterface
-	ControlServer *http.Server
-	ReqCount      int
-	TpsMu         sync.Mutex
-	StartTime     time.Time
 }
 
 // Load initial ManagedServer configuration from file
