@@ -1,4 +1,4 @@
-package server
+package control
 
 import (
 	"github.com/gin-gonic/gin"
@@ -16,33 +16,19 @@ type GinServer struct {
 func (s *GinServer) InitManagedServer(cs *ControlServer) {
 	gin.SetMode(gin.ReleaseMode)
 	s.router = gin.New()
-
-	// Middleware
-	s.router.Use(func(c *gin.Context) {
-		cs.mu.Lock()
-		defer cs.mu.Unlock()
-
-		if !cs.ManagedServer.IsRunning() {
-			c.JSON(http.StatusServiceUnavailable, gin.H{
-				"code":  http.StatusServiceUnavailable,
-				"error": "server is unavailable",
-			})
-			c.Abort()
-			return
-		}
-		c.Next()
-	})
-
+	s.router.Use(ServerAccessControlMiddlewareGin(cs))
 	s.router.GET("/", func(c *gin.Context) {
 		for _, pathConfig := range cs.Config.Paths {
-			if pathConfig.Path == c.Request.URL.Path {
-				response := cs.SelectResponse(pathConfig.ResponseSet)
-				for key, value := range response.Headers {
-					c.Header(key, value)
-				}
-				time.Sleep(time.Duration(response.Delay) * time.Millisecond)
-				c.JSON(http.StatusOK, response.Body)
+			if pathConfig.Path != c.Request.URL.Path {
+				continue
 			}
+
+			response := cs.SelectResponse(pathConfig.ResponseSet)
+			for key, value := range response.Headers {
+				c.Header(key, value)
+			}
+			time.Sleep(time.Duration(response.Delay) * time.Millisecond)
+			c.JSON(http.StatusOK, response.Body)
 		}
 	})
 
@@ -71,4 +57,29 @@ func (s *GinServer) IsRunning() bool {
 
 func (s *GinServer) SetRunning(v bool) {
 	s.running = v
+}
+
+func ServerAccessControlMiddlewareGin(cs *ControlServer) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		cs.mu.Lock()
+		defer cs.mu.Unlock()
+
+		if cs.StartTime.IsZero() {
+			cs.StartTime = time.Now()
+		}
+
+		if !cs.ManagedServer.IsRunning() {
+			c.JSON(http.StatusServiceUnavailable, "Service Unavailable")
+			c.Abort()
+			return
+		}
+
+		go func() {
+			cs.TpsMu.Lock()
+			defer cs.TpsMu.Unlock()
+			cs.ReqCount++
+		}()
+
+		c.Next()
+	}
 }

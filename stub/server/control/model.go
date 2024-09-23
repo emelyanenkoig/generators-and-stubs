@@ -1,4 +1,4 @@
-package server
+package control
 
 import (
 	"encoding/json"
@@ -43,6 +43,22 @@ type Response struct {
 	Delay   int               `json:"delay"` // in milliseconds
 	Headers map[string]string `json:"headers"`
 	Body    string            `json:"body"`
+}
+
+// internal/server/control/controlServer.go
+func NewControlServer(serverType string) *ControlServer {
+	cs := &ControlServer{
+		RRobinIndex: map[string]int{},
+	}
+	switch serverType {
+	case "fasthttp":
+		cs.ManagedServer = &FastHTTPServer{}
+	case "gin":
+		cs.ManagedServer = &GinServer{}
+	default:
+		cs.ManagedServer = &GinServer{}
+	}
+	return cs
 }
 
 // Load initial ManagedServer configuration from file

@@ -1,6 +1,8 @@
-package server
+package control
 
-import "math/rand"
+import (
+	"math/rand"
+)
 
 // Select a response based on the strategy ("round-robin" or "weight")
 func (cs *ControlServer) SelectResponse(responseSet ResponseSet) Response {

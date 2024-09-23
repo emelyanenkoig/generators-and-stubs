@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"gns/stub/env"
-	"gns/stub/server"
+	"gns/stub/server/control"
 	"log"
 	"runtime"
 	"sync"
@@ -16,7 +16,7 @@ func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	f := env.ReadENV()
 
-	controlServer := server.NewControlServer(f.ManagedServerType)
+	controlServer := control.NewControlServer(f.ManagedServerType)
 
 	// Загружаем начальную конфигурацию сервера
 	err := controlServer.LoadServerConfig(fmt.Sprintf("%s", f.ResponseFilePath))
