@@ -13,7 +13,7 @@ import (
 type ControlServer struct {
 	mu            sync.RWMutex
 	Config        ServerConfig
-	RRobinIndex   map[string]int
+	Balancer      Balancer
 	ManagedServer ManagedServerInterface
 	ControlServer *http.Server
 	ReqCount      int
@@ -49,7 +49,7 @@ type Response struct {
 
 func NewControlServer(environment env.Environment) *ControlServer {
 	cs := &ControlServer{
-		RRobinIndex: map[string]int{},
+		Balancer: Balancer{RRobinIndex: map[string]int{}},
 	}
 	cs.env = environment
 	switch environment.ManagedServerType {

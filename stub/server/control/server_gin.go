@@ -23,7 +23,7 @@ func (s *GinServer) InitManagedServer(cs *ControlServer) {
 				continue
 			}
 
-			response := cs.SelectResponse(pathConfig.ResponseSet)
+			response := cs.Balancer.SelectResponse(pathConfig.ResponseSet)
 			for key, value := range response.Headers {
 				c.Header(key, value)
 			}

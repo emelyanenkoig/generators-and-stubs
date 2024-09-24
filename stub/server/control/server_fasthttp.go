@@ -77,7 +77,7 @@ func (cs *ControlServer) RouteHandlerFastHTTP(ctx *fasthttp.RequestCtx) {
 			continue
 		}
 
-		response := cs.SelectResponse(pathConfig.ResponseSet)
+		response := cs.Balancer.SelectResponse(pathConfig.ResponseSet)
 		for key, value := range response.Headers {
 			ctx.Response.Header.Set(key, value)
 		}

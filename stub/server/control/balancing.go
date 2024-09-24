@@ -4,47 +4,54 @@ import (
 	"math/rand"
 )
 
-//type Balancer interface {
-//	SelectResponce(responseSet ResponseSet)
-//	SelectRoundRobinResponse(responseSet ResponseSet)
-//}
-//
-//type Balancer struct {
-//
-//}
+type Balancer struct {
+	RRobinIndex map[string]int
+}
+
+func NewBalancer() *Balancer {
+	return &Balancer{
+		RRobinIndex: make(map[string]int),
+	}
+}
+
+func (b *Balancer) InitBalancer() {
+	b.RRobinIndex = make(map[string]int)
+}
 
 // Select a response based on the strategy ("round-robin" or "weight")
-func (cs *ControlServer) SelectResponse(responseSet ResponseSet) Response {
+func (b *Balancer) SelectResponse(responseSet ResponseSet) Response {
 	switch responseSet.Choice {
 	case "round-robin":
-		return cs.SelectRoundRobinResponse(responseSet)
+		return b.SelectRoundRobinResponse(responseSet)
 	case "weight":
-		return cs.SelectWeightedResponse(responseSet)
+		return b.SelectWeightedResponse(responseSet)
+	case "random":
+		return b.SelectRandomResponse(responseSet)
 	default:
 		return responseSet.Responses[0] // Default to the first response if choice is invalid
 	}
 }
 
 // Round-robin selection
-func (cs *ControlServer) SelectRoundRobinResponse(responseSet ResponseSet) Response {
+func (b *Balancer) SelectRoundRobinResponse(responseSet ResponseSet) Response {
 	if len(responseSet.Responses) == 0 {
 		return Response{}
 	}
 
 	// Инициализация индекса, если он еще не существует для данного выбора
-	if _, exists := cs.RRobinIndex[responseSet.Choice]; !exists {
-		cs.RRobinIndex[responseSet.Choice] = 0
+	if _, exists := b.RRobinIndex[responseSet.Choice]; !exists {
+		b.RRobinIndex[responseSet.Choice] = 0
 	}
-	index := cs.RRobinIndex[responseSet.Choice]
+	index := b.RRobinIndex[responseSet.Choice]
 
 	// Обновляем индекс для следующего вызова
-	cs.RRobinIndex[responseSet.Choice] = (index + 1) % len(responseSet.Responses)
+	b.RRobinIndex[responseSet.Choice] = (index + 1) % len(responseSet.Responses)
 
 	return responseSet.Responses[index]
 }
 
 // Weighted random selection
-func (cs *ControlServer) SelectWeightedResponse(responseSet ResponseSet) Response {
+func (b *Balancer) SelectWeightedResponse(responseSet ResponseSet) Response {
 	if len(responseSet.Responses) == 0 {
 		return Response{}
 	}
@@ -64,4 +71,13 @@ func (cs *ControlServer) SelectWeightedResponse(responseSet ResponseSet) Respons
 	}
 
 	return responseSet.Responses[0]
+}
+
+func (b *Balancer) SelectRandomResponse(responseSet ResponseSet) Response {
+	if len(responseSet.Responses) == 0 {
+		return Response{}
+	}
+
+	randValue := rand.Intn(len(responseSet.Responses))
+	return responseSet.Responses[randValue]
 }

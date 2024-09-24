@@ -9,6 +9,7 @@ import (
 
 type NetHttpServer struct {
 	server    *http.Server
+	router    *mux.Router
 	isRunning bool
 }
 
@@ -83,7 +84,7 @@ func (cs *ControlServer) RouteHandler(w http.ResponseWriter, r *http.Request) {
 		if pathConfig.Path != path {
 			continue
 		}
-		response := cs.SelectResponse(pathConfig.ResponseSet) // Select response (round-robin or weighted)
+		response := cs.Balancer.SelectResponse(pathConfig.ResponseSet) // Select response (round-robin or weighted)
 		for key, value := range response.Headers {
 			w.Header().Set(key, value)
 		}
