@@ -17,7 +17,6 @@ type NetHttpServer struct {
 
 func (s *NetHttpServer) InitManagedServer(cs *ControlServer) {
 	s.router = mux.NewRouter()
-	s.port = cs.env.ServerPort
 
 	for _, pathConfig := range cs.Config.Paths {
 		s.router.HandleFunc(pathConfig.Path, cs.RouteHandler).Methods(http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete)
