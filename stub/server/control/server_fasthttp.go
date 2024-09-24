@@ -9,6 +9,8 @@ import (
 type FastHTTPServer struct {
 	server  *fasthttp.Server
 	running bool
+	addr    string
+	port    string
 }
 
 func (s *FastHTTPServer) InitManagedServer(cs *ControlServer) {

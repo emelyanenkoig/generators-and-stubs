@@ -11,20 +11,23 @@ type NetHttpServer struct {
 	server    *http.Server
 	router    *mux.Router
 	isRunning bool
+	addr      string
+	port      string
 }
 
 func (s *NetHttpServer) InitManagedServer(cs *ControlServer) {
-	r := mux.NewRouter()
+	s.router = mux.NewRouter()
+	s.port = cs.env.ServerPort
 
 	for _, pathConfig := range cs.Config.Paths {
-		r.HandleFunc(pathConfig.Path, cs.RouteHandler).Methods(http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete)
+		s.router.HandleFunc(pathConfig.Path, cs.RouteHandler).Methods(http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete)
 	}
 
-	r.Use(cs.ServerAccessControlMiddlewareNetHttp) // middleware
+	s.router.Use(cs.ServerAccessControlMiddlewareNetHttp) // middleware
 
 	s.server = &http.Server{
 		Addr:           ":8080",
-		Handler:        r,
+		Handler:        s.router,
 		ReadTimeout:    5 * time.Second,
 		WriteTimeout:   5 * time.Second,
 		IdleTimeout:    10 * time.Second,

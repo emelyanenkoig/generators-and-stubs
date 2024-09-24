@@ -11,12 +11,17 @@ type GinServer struct {
 	server  *http.Server
 	router  *gin.Engine
 	running bool
+	addr    string
+	port    string
 }
 
+// Придумать как выпилить ControlServer отсюда
 func (s *GinServer) InitManagedServer(cs *ControlServer) {
 	gin.SetMode(gin.ReleaseMode)
 	s.router = gin.New()
+
 	s.router.Use(ServerAccessControlMiddlewareGin(cs))
+
 	s.router.GET("/", func(c *gin.Context) {
 		for _, pathConfig := range cs.Config.Paths {
 			if pathConfig.Path != c.Request.URL.Path {

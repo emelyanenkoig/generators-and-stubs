@@ -20,7 +20,7 @@ func (cs *ControlServer) InitControlServer() {
 	r.GET("/rest/api/v1/server/status", cs.StatusControlServer)
 
 	cs.ControlServer = &http.Server{
-		Addr:           fmt.Sprintf("%s:%s", cs.env.Addr, cs.env.ControlServerPort),
+		Addr:           fmt.Sprintf("%s:%s", cs.addr, cs.port),
 		Handler:        r,
 		ReadTimeout:    5 * time.Second,
 		WriteTimeout:   5 * time.Second,
@@ -30,7 +30,7 @@ func (cs *ControlServer) InitControlServer() {
 }
 
 func (cs *ControlServer) RunControlServer() {
-	log.Printf("Starting control server on %s:%s", cs.env.Addr, cs.env.ControlServerPort)
+	log.Printf("Starting control server on %s:%s", cs.addr, cs.port)
 	if err := cs.ControlServer.ListenAndServe(); err != nil {
 		log.Fatalf("Error starting server: %v", err)
 	}

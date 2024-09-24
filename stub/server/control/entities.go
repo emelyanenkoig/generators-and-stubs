@@ -11,7 +11,6 @@ import (
 
 // ControlServer TODO Latency
 type ControlServer struct {
-	mu            sync.RWMutex
 	Config        ServerConfig
 	Balancer      Balancer
 	ManagedServer ManagedServerInterface
@@ -19,7 +18,9 @@ type ControlServer struct {
 	ReqCount      int
 	TpsMu         sync.Mutex
 	StartTime     time.Time
-	env           env.Environment
+	mu            sync.RWMutex
+	addr          string
+	port          string
 }
 
 // ServerConfig defines the structure of the ManagedServer configuration
@@ -47,18 +48,28 @@ type Response struct {
 	Body    string            `json:"body"`
 }
 
-func NewControlServer(environment env.Environment) *ControlServer {
+func NewControlServer(env env.Environment) *ControlServer {
 	cs := &ControlServer{
 		Balancer: Balancer{RRobinIndex: map[string]int{}},
+		addr:     env.ControlServerAddr,
+		port:     env.ControlServerPort,
 	}
-	cs.env = environment
-	switch environment.ManagedServerType {
+	switch env.ManagedServerType {
 	case "fasthttp":
-		cs.ManagedServer = &FastHTTPServer{}
+		cs.ManagedServer = &FastHTTPServer{
+			addr: env.ServerAddr,
+			port: env.ServerPort,
+		}
 	case "gin":
-		cs.ManagedServer = &GinServer{}
+		cs.ManagedServer = &GinServer{
+			addr: env.ServerAddr,
+			port: env.ServerPort,
+		}
 	default:
-		cs.ManagedServer = &NetHttpServer{}
+		cs.ManagedServer = &NetHttpServer{
+			addr: env.ServerAddr,
+			port: env.ServerPort,
+		}
 	}
 	return cs
 }
