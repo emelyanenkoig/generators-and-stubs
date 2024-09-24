@@ -4,6 +4,15 @@ import (
 	"math/rand"
 )
 
+//type Balancer interface {
+//	SelectResponce(responseSet ResponseSet)
+//	SelectRoundRobinResponse(responseSet ResponseSet)
+//}
+//
+//type Balancer struct {
+//
+//}
+
 // Select a response based on the strategy ("round-robin" or "weight")
 func (cs *ControlServer) SelectResponse(responseSet ResponseSet) Response {
 	switch responseSet.Choice {
@@ -26,14 +35,11 @@ func (cs *ControlServer) SelectRoundRobinResponse(responseSet ResponseSet) Respo
 	if _, exists := cs.RRobinIndex[responseSet.Choice]; !exists {
 		cs.RRobinIndex[responseSet.Choice] = 0
 	}
-
-	// Получаем текущий индекс
 	index := cs.RRobinIndex[responseSet.Choice]
 
 	// Обновляем индекс для следующего вызова
 	cs.RRobinIndex[responseSet.Choice] = (index + 1) % len(responseSet.Responses)
 
-	// Возвращаем выбранный ответ
 	return responseSet.Responses[index]
 }
 

@@ -23,11 +23,9 @@ func (s *FastHTTPServer) InitManagedServer(cs *ControlServer) {
 		WriteTimeout: 5 * time.Second,
 		IdleTimeout:  10 * time.Second,
 	}
-
-	s.running = false
 }
 
-func (s *FastHTTPServer) StartManagedServer(cs *ControlServer) {
+func (s *FastHTTPServer) RunManagedServer(cs *ControlServer) {
 	log.Println("Managed Server is starting on port 8080 (fasthttp)...")
 	s.SetRunning(true)
 

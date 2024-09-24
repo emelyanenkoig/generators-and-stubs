@@ -1,31 +1,43 @@
 package control
 
 import (
+	"fmt"
 	"github.com/gin-gonic/gin"
-	"gns/stub/env"
 	"log"
 	"net/http"
 	"time"
 )
 
-func (cs *ControlServer) InitControlServer(f env.Environment) {
+func (cs *ControlServer) InitControlServer() {
 	r := gin.Default()
 
 	r.GET("/rest/api/v1/server/config", cs.GetControlServerConfig)
 	r.POST("/rest/api/v1/server/config", cs.UpdateControlServerConfig)
 
 	r.DELETE("/rest/api/v1/server/config", cs.DeleteControlServerConfig)
-	r.POST("/rest/api/v1/server/start", cs.StartControlServer)
-	r.POST("/rest/api/v1/server/stop", cs.StopControlServer)
+	r.POST("/rest/api/v1/server/start", cs.StartManagedServer)
+	r.POST("/rest/api/v1/server/stop", cs.StopManagedServer)
 	r.GET("/rest/api/v1/server/status", cs.StatusControlServer)
 
-	log.Println("Starting control server: 8062")
-	if err := r.Run(":8062"); err != nil {
-		log.Fatalf("Error starting server: %v", err)
+	cs.ControlServer = &http.Server{
+		Addr:           fmt.Sprintf("%s:%s", cs.env.Addr, cs.env.ControlServerPort),
+		Handler:        r,
+		ReadTimeout:    5 * time.Second,
+		WriteTimeout:   5 * time.Second,
+		IdleTimeout:    10 * time.Second,
+		MaxHeaderBytes: 1 << 20,
 	}
 }
 
-// GetServerConfig возвращает текущую конфигурацию сервера
+func (cs *ControlServer) RunControlServer() {
+	log.Printf("Starting control server on %s:%s", cs.env.Addr, cs.env.ControlServerPort)
+	if err := cs.ControlServer.ListenAndServe(); err != nil {
+		log.Fatalf("Error starting server: %v", err)
+	}
+
+}
+
+// GetControlServerConfig return current configuration of ControlServer
 func (cs *ControlServer) GetControlServerConfig(c *gin.Context) {
 	cs.mu.RLock()
 	defer cs.mu.RUnlock()
@@ -53,7 +65,7 @@ func (cs *ControlServer) DeleteControlServerConfig(c *gin.Context) {
 	c.String(http.StatusOK, "Configuration deleted successfully")
 }
 
-func (cs *ControlServer) StartControlServer(c *gin.Context) {
+func (cs *ControlServer) StartManagedServer(c *gin.Context) {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 
@@ -67,7 +79,7 @@ func (cs *ControlServer) StartControlServer(c *gin.Context) {
 	c.String(http.StatusOK, "Server started successfully")
 }
 
-func (cs *ControlServer) StopControlServer(c *gin.Context) {
+func (cs *ControlServer) StopManagedServer(c *gin.Context) {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 
@@ -99,4 +111,12 @@ func (cs *ControlServer) StatusControlServer(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, status)
+}
+
+func (cs *ControlServer) InitManagedServer() {
+	cs.ManagedServer.InitManagedServer(cs) // Инициализация сервера
+}
+
+func (cs *ControlServer) RunManagedServer() {
+	cs.ManagedServer.RunManagedServer(cs) // Запуск сервера
 }

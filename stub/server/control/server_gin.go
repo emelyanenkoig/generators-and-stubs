@@ -42,7 +42,7 @@ func (s *GinServer) InitManagedServer(cs *ControlServer) {
 	}
 }
 
-func (s *GinServer) StartManagedServer(cs *ControlServer) {
+func (s *GinServer) RunManagedServer(cs *ControlServer) {
 	log.Println("Managed Server is starting on port 8080 (gin)...")
 	s.SetRunning(true)
 	if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {

@@ -2,13 +2,14 @@ package control
 
 import (
 	"encoding/json"
+	"gns/stub/env"
 	"net/http"
 	"os"
 	"sync"
 	"time"
 )
 
-// ControlServer TODO либо начинаем отсчет TPS Latency с запуска
+// ControlServer TODO Latency
 type ControlServer struct {
 	mu            sync.RWMutex
 	Config        ServerConfig
@@ -18,6 +19,7 @@ type ControlServer struct {
 	ReqCount      int
 	TpsMu         sync.Mutex
 	StartTime     time.Time
+	env           env.Environment
 }
 
 // ServerConfig defines the structure of the ManagedServer configuration
@@ -45,18 +47,18 @@ type Response struct {
 	Body    string            `json:"body"`
 }
 
-// internal/server/control/controlServer.go
-func NewControlServer(serverType string) *ControlServer {
+func NewControlServer(environment env.Environment) *ControlServer {
 	cs := &ControlServer{
 		RRobinIndex: map[string]int{},
 	}
-	switch serverType {
+	cs.env = environment
+	switch environment.ManagedServerType {
 	case "fasthttp":
 		cs.ManagedServer = &FastHTTPServer{}
 	case "gin":
 		cs.ManagedServer = &GinServer{}
 	default:
-		cs.ManagedServer = &GinServer{}
+		cs.ManagedServer = &NetHttpServer{}
 	}
 	return cs
 }

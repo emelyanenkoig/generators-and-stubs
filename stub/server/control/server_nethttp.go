@@ -7,12 +7,12 @@ import (
 	"time"
 )
 
-type Server struct {
+type NetHttpServer struct {
 	server    *http.Server
 	isRunning bool
 }
 
-func (s *Server) InitManagedServer(cs *ControlServer) {
+func (s *NetHttpServer) InitManagedServer(cs *ControlServer) {
 	r := mux.NewRouter()
 
 	for _, pathConfig := range cs.Config.Paths {
@@ -31,7 +31,7 @@ func (s *Server) InitManagedServer(cs *ControlServer) {
 	}
 }
 
-func (s *Server) StartManagedServer(cs *ControlServer) {
+func (s *NetHttpServer) RunManagedServer(cs *ControlServer) {
 	log.Println("Managed Server is starting on port 8080 (net/http)...")
 	s.SetRunning(true)
 	if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -39,15 +39,15 @@ func (s *Server) StartManagedServer(cs *ControlServer) {
 	}
 }
 
-func (s *Server) IsRunning() bool {
+func (s *NetHttpServer) IsRunning() bool {
 	return s.isRunning
 }
 
-func (s *Server) SetRunning(v bool) {
+func (s *NetHttpServer) SetRunning(v bool) {
 	s.isRunning = v
 }
 
-// Middleware to control access to the managed ManagedServer
+// Middleware to control access to the managed NetHttpServer
 func (cs *ControlServer) ServerAccessControlMiddlewareNetHttp(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cs.mu.RLock()
