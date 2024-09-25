@@ -6,18 +6,12 @@ import (
 	"net/http"
 	"os"
 	"sync"
-	"time"
 )
 
 // ControlServer TODO Latency
 type ControlServer struct {
-	Config        ServerConfig
-	Balancer      Balancer
 	ManagedServer ManagedServerInterface
 	ControlServer *http.Server
-	ReqCount      int
-	TpsMu         sync.Mutex
-	StartTime     time.Time
 	mu            sync.RWMutex
 	addr          string
 	port          string
@@ -50,25 +44,26 @@ type Response struct {
 
 func NewControlServer(env env.Environment) *ControlServer {
 	cs := &ControlServer{
-		Balancer: Balancer{RRobinIndex: map[string]int{}},
-		addr:     env.ControlServerAddr,
-		port:     env.ControlServerPort,
+		addr: env.ControlServerAddr,
+		port: env.ControlServerPort,
 	}
 	switch env.ManagedServerType {
-	case "fasthttp":
-		cs.ManagedServer = &FastHTTPServer{
-			addr: env.ServerAddr,
-			port: env.ServerPort,
-		}
+	//case "fasthttp":
+	//	cs.ManagedServer = &FastHTTPServer{
+	//		addr: env.ServerAddr,
+	//		port: env.ServerPort,
+	//	}
 	case "gin":
 		cs.ManagedServer = &GinServer{
-			addr: env.ServerAddr,
-			port: env.ServerPort,
+			addr:     env.ServerAddr,
+			port:     env.ServerPort,
+			Balancer: Balancer{make(map[string]int)},
 		}
 	default:
 		cs.ManagedServer = &NetHttpServer{
-			addr: env.ServerAddr,
-			port: env.ServerPort,
+			addr:     env.ServerAddr,
+			port:     env.ServerPort,
+			Balancer: Balancer{RRobinIndex: make(map[string]int)},
 		}
 	}
 	return cs
@@ -83,5 +78,11 @@ func (cs *ControlServer) LoadServerConfig(filePath string) error {
 	defer file.Close()
 
 	decoder := json.NewDecoder(file)
-	return decoder.Decode(&cs.Config)
+	newConfig := ServerConfig{}
+	err = decoder.Decode(&newConfig)
+	if err != nil {
+		return err
+	}
+	cs.ManagedServer.SetConfig(newConfig)
+	return nil
 }

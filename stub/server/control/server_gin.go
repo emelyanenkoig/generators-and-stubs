@@ -1,44 +1,59 @@
 package control
 
 import (
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 )
 
 type GinServer struct {
-	server  *http.Server
-	router  *gin.Engine
-	running bool
-	addr    string
-	port    string
+	Config    ServerConfig
+	Balancer  Balancer
+	server    *http.Server
+	router    *gin.Engine
+	mu        sync.RWMutex
+	isRunning bool
+	addr      string
+	port      string
+	reqCount  uint
+	rpsMu     sync.Mutex
+	startTime time.Time
 }
 
-// Придумать как выпилить ControlServer отсюда
-func (s *GinServer) InitManagedServer(cs *ControlServer) {
+func (s *GinServer) InitManagedServer() {
 	gin.SetMode(gin.ReleaseMode)
 	s.router = gin.New()
 
-	s.router.Use(ServerAccessControlMiddlewareGin(cs))
+	s.router.Use(s.serverAccessControlMiddlewareGin())
 
 	s.router.GET("/", func(c *gin.Context) {
-		for _, pathConfig := range cs.Config.Paths {
+		s.mu.RLock()
+		defer s.mu.RUnlock()
+
+		for _, pathConfig := range s.Config.Paths {
 			if pathConfig.Path != c.Request.URL.Path {
 				continue
 			}
-
-			response := cs.Balancer.SelectResponse(pathConfig.ResponseSet)
+			// TODO разобраться с race condition
+			s.mu.Lock()
+			response := s.Balancer.SelectResponse(pathConfig.ResponseSet)
+			s.mu.Unlock()
 			for key, value := range response.Headers {
 				c.Header(key, value)
 			}
 			time.Sleep(time.Duration(response.Delay) * time.Millisecond)
 			c.JSON(http.StatusOK, response.Body)
+			return
 		}
+
+		c.JSON(http.StatusNotFound, "Path not found")
 	})
 
 	s.server = &http.Server{
-		Addr:           ":8080",
+		Addr:           fmt.Sprintf("%s:%s", s.addr, s.port),
 		Handler:        s.router,
 		ReadTimeout:    5 * time.Second,
 		WriteTimeout:   5 * time.Second,
@@ -47,43 +62,68 @@ func (s *GinServer) InitManagedServer(cs *ControlServer) {
 	}
 }
 
-func (s *GinServer) RunManagedServer(cs *ControlServer) {
-	log.Println("Managed Server is starting on port 8080 (gin)...")
+func (s *GinServer) RunManagedServer() {
+	log.Printf("Managed Server is starting on port %s (gin)...", s.port)
 	s.SetRunning(true)
 	if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("Could not listen on :8080: %v\n", err)
+		log.Fatalf("Could not listen on :%s: %v\n", s.port, err)
 	}
 
 }
 
 func (s *GinServer) IsRunning() bool {
-	return s.running
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.isRunning
 }
 
 func (s *GinServer) SetRunning(v bool) {
-	s.running = v
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if v == false {
+		s.startTime = time.Time{}
+	}
+	s.isRunning = v
 }
 
-func ServerAccessControlMiddlewareGin(cs *ControlServer) gin.HandlerFunc {
+func (s *GinServer) GetConfig() ServerConfig {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.Config
+}
+
+func (s *GinServer) SetConfig(config ServerConfig) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.Config = config
+}
+
+func (s *GinServer) GetTimeSinceStart() time.Time {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.startTime
+}
+
+func (s *GinServer) GetReqSinceStart() uint {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.reqCount
+}
+
+func (s *GinServer) serverAccessControlMiddlewareGin() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		cs.mu.Lock()
-		defer cs.mu.Unlock()
-
-		if cs.StartTime.IsZero() {
-			cs.StartTime = time.Now()
-		}
-
-		if !cs.ManagedServer.IsRunning() {
+		s.mu.RLock()
+		if !s.isRunning {
+			s.mu.RUnlock()
 			c.JSON(http.StatusServiceUnavailable, "Service Unavailable")
 			c.Abort()
 			return
 		}
+		s.mu.RUnlock()
 
-		go func() {
-			cs.TpsMu.Lock()
-			defer cs.TpsMu.Unlock()
-			cs.ReqCount++
-		}()
+		s.rpsMu.Lock()
+		s.reqCount++
+		s.rpsMu.Unlock()
 
 		c.Next()
 	}

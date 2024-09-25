@@ -37,11 +37,10 @@ func (cs *ControlServer) RunControlServer() {
 
 }
 
-// GetControlServerConfig return current configuration of ControlServer
 func (cs *ControlServer) GetControlServerConfig(c *gin.Context) {
 	cs.mu.RLock()
 	defer cs.mu.RUnlock()
-	c.JSON(http.StatusOK, cs.Config)
+	c.JSON(http.StatusOK, cs.ManagedServer.GetConfig())
 }
 
 func (cs *ControlServer) UpdateControlServerConfig(c *gin.Context) {
@@ -51,17 +50,16 @@ func (cs *ControlServer) UpdateControlServerConfig(c *gin.Context) {
 		return
 	}
 	cs.mu.Lock()
-	cs.Config = newConfig
-	cs.mu.Unlock()
+	defer cs.mu.Unlock()
 
+	cs.ManagedServer.SetConfig(newConfig)
 	c.String(http.StatusOK, "The configuration has been successfully applied")
 }
 
 func (cs *ControlServer) DeleteControlServerConfig(c *gin.Context) {
 	cs.mu.Lock()
-	cs.Config = ServerConfig{} // Сброс конфигурации
-	cs.mu.Unlock()
-
+	defer cs.mu.Unlock()
+	cs.ManagedServer.SetConfig(ServerConfig{})
 	c.String(http.StatusOK, "Configuration deleted successfully")
 }
 
@@ -74,8 +72,8 @@ func (cs *ControlServer) StartManagedServer(c *gin.Context) {
 		return
 	}
 
-	cs.StartTime = time.Now()
 	cs.ManagedServer.SetRunning(true)
+	go cs.ManagedServer.RunManagedServer() // запуск сервера в отдельной горутине
 	c.String(http.StatusOK, "Server started successfully")
 }
 
@@ -96,16 +94,16 @@ func (cs *ControlServer) StatusControlServer(c *gin.Context) {
 	cs.mu.RLock()
 	defer cs.mu.RUnlock()
 
-	seconds := time.Since(cs.StartTime).Seconds()
+	seconds := time.Since(cs.ManagedServer.GetTimeSinceStart()).Seconds()
 
 	status := struct {
 		Running    bool    `json:"running"`
-		TPS        int     `json:"tps"`
+		TPS        uint    `json:"tps"`
 		AvgLatency float64 `json:"avg_latency"`
 		Duration   float64 `json:"duration"`
 	}{
 		Running:    cs.ManagedServer.IsRunning(),
-		TPS:        cs.ReqCount / int(seconds),
+		TPS:        cs.ManagedServer.GetReqSinceStart() / uint(seconds),
 		AvgLatency: 1.0, // Заглушка для средней задержки
 		Duration:   seconds,
 	}
@@ -114,9 +112,9 @@ func (cs *ControlServer) StatusControlServer(c *gin.Context) {
 }
 
 func (cs *ControlServer) InitManagedServer() {
-	cs.ManagedServer.InitManagedServer(cs) // Инициализация сервера
+	cs.ManagedServer.InitManagedServer() // Инициализация сервера
 }
 
 func (cs *ControlServer) RunManagedServer() {
-	cs.ManagedServer.RunManagedServer(cs) // Запуск сервера
+	cs.ManagedServer.RunManagedServer() // Запуск сервера
 }

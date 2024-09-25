@@ -8,12 +8,6 @@ type Balancer struct {
 	RRobinIndex map[string]int
 }
 
-func NewBalancer() *Balancer {
-	return &Balancer{
-		RRobinIndex: make(map[string]int),
-	}
-}
-
 func (b *Balancer) InitBalancer() {
 	b.RRobinIndex = make(map[string]int)
 }

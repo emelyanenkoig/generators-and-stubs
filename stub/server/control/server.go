@@ -1,8 +1,14 @@
 package control
 
+import "time"
+
 type ManagedServerInterface interface {
-	InitManagedServer(cs *ControlServer) // Инициализация сервера
-	RunManagedServer(cs *ControlServer)  // Запуск сервера
-	SetRunning(v bool)
+	InitManagedServer() // Инициализация сервера
+	RunManagedServer()  // Запуск сервера
 	IsRunning() bool
+	SetRunning(v bool)
+	GetConfig() ServerConfig
+	SetConfig(config ServerConfig)
+	GetTimeSinceStart() time.Time
+	GetReqSinceStart() uint
 }
