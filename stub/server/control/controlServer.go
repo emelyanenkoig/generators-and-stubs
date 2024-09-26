@@ -1,14 +1,31 @@
 package control
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/gin-gonic/gin"
+	"gns/stub/env"
+	"gns/stub/server/managed"
+	"gns/stub/server/managed/entities"
+	"gns/stub/server/managed/servers"
 	"log"
 	"net/http"
+	"os"
+	"sync"
 	"time"
 )
 
+// ControlServer TODO Latency
+type ControlServer struct {
+	ManagedServer managed.ManagedServerInterface
+	ControlServer *http.Server
+	mu            sync.RWMutex
+	addr          string
+	port          string
+}
+
 func (cs *ControlServer) InitControlServer() {
+	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
 
 	r.GET("/rest/api/v1/server/config", cs.GetControlServerConfig)
@@ -44,7 +61,7 @@ func (cs *ControlServer) GetControlServerConfig(c *gin.Context) {
 }
 
 func (cs *ControlServer) UpdateControlServerConfig(c *gin.Context) {
-	var newConfig ServerConfig
+	var newConfig entities.ServerConfig
 	if err := c.ShouldBindJSON(&newConfig); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid configuration"})
 		return
@@ -59,7 +76,7 @@ func (cs *ControlServer) UpdateControlServerConfig(c *gin.Context) {
 func (cs *ControlServer) DeleteControlServerConfig(c *gin.Context) {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
-	cs.ManagedServer.SetConfig(ServerConfig{})
+	cs.ManagedServer.SetConfig(entities.ServerConfig{})
 	c.String(http.StatusOK, "Configuration deleted successfully")
 }
 
@@ -117,4 +134,38 @@ func (cs *ControlServer) InitManagedServer() {
 
 func (cs *ControlServer) RunManagedServer() {
 	cs.ManagedServer.RunManagedServer() // Запуск сервера
+}
+
+func NewControlServer(env env.Environment) *ControlServer {
+	cs := &ControlServer{
+		addr: env.ControlServerAddr,
+		port: env.ControlServerPort,
+	}
+	switch env.ManagedServerType {
+	case managed.ServerTypeFastHTTP:
+		cs.ManagedServer = servers.NewFastHTTPServer(env)
+	case managed.ServerTypeGin:
+		cs.ManagedServer = servers.NewGinServer(env)
+	default:
+		cs.ManagedServer = servers.NewNetHttpServer(env)
+	}
+	return cs
+}
+
+// Load initial ManagedServer configuration from file
+func (cs *ControlServer) LoadServerConfig(filePath string) error {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	decoder := json.NewDecoder(file)
+	newConfig := entities.ServerConfig{}
+	err = decoder.Decode(&newConfig)
+	if err != nil {
+		return err
+	}
+	cs.ManagedServer.SetConfig(newConfig)
+	return nil
 }

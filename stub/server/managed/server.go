@@ -1,14 +1,22 @@
-package control
+package managed
 
-import "time"
+import (
+	"gns/stub/server/managed/entities"
+	"time"
+)
 
 type ManagedServerInterface interface {
 	InitManagedServer() // Инициализация сервера
 	RunManagedServer()  // Запуск сервера
 	IsRunning() bool
 	SetRunning(v bool)
-	GetConfig() ServerConfig
-	SetConfig(config ServerConfig)
+	GetConfig() entities.ServerConfig
+	SetConfig(config entities.ServerConfig)
 	GetTimeSinceStart() time.Time
 	GetReqSinceStart() uint
 }
+
+const (
+	ServerTypeFastHTTP = "fasthttp"
+	ServerTypeGin      = "gin"
+)

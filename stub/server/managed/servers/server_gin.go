@@ -1,8 +1,11 @@
-package control
+package servers
 
 import (
 	"fmt"
 	"github.com/gin-gonic/gin"
+	"gns/stub/env"
+	"gns/stub/server/managed/balancing"
+	"gns/stub/server/managed/entities"
 	"log"
 	"net/http"
 	"sync"
@@ -10,17 +13,25 @@ import (
 )
 
 type GinServer struct {
-	Config    ServerConfig
-	Balancer  Balancer
+	Config    entities.ServerConfig
+	Balancer  *balancing.Balancer
 	server    *http.Server
 	router    *gin.Engine
 	mu        sync.RWMutex
 	isRunning bool
-	addr      string
-	port      string
+	Addr      string
+	Port      string
 	reqCount  uint
 	rpsMu     sync.Mutex
 	startTime time.Time
+}
+
+func NewGinServer(env env.Environment) *GinServer {
+	return &GinServer{
+		Addr:     env.ServerAddr,
+		Port:     env.ServerPort,
+		Balancer: balancing.InitBalancer(),
+	}
 }
 
 func (s *GinServer) InitManagedServer() {
@@ -37,10 +48,7 @@ func (s *GinServer) InitManagedServer() {
 			if pathConfig.Path != c.Request.URL.Path {
 				continue
 			}
-			// TODO разобраться с race condition
-			s.mu.Lock()
 			response := s.Balancer.SelectResponse(pathConfig.ResponseSet)
-			s.mu.Unlock()
 			for key, value := range response.Headers {
 				c.Header(key, value)
 			}
@@ -53,7 +61,7 @@ func (s *GinServer) InitManagedServer() {
 	})
 
 	s.server = &http.Server{
-		Addr:           fmt.Sprintf("%s:%s", s.addr, s.port),
+		Addr:           fmt.Sprintf("%s:%s", s.Addr, s.Port),
 		Handler:        s.router,
 		ReadTimeout:    5 * time.Second,
 		WriteTimeout:   5 * time.Second,
@@ -63,10 +71,10 @@ func (s *GinServer) InitManagedServer() {
 }
 
 func (s *GinServer) RunManagedServer() {
-	log.Printf("Managed Server is starting on port %s (gin)...", s.port)
+	log.Printf("Managed Server is starting on port %s (gin)...", s.Port)
 	s.SetRunning(true)
 	if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("Could not listen on :%s: %v\n", s.port, err)
+		log.Fatalf("Could not listen on :%s: %v\n", s.Port, err)
 	}
 
 }
@@ -86,13 +94,13 @@ func (s *GinServer) SetRunning(v bool) {
 	s.isRunning = v
 }
 
-func (s *GinServer) GetConfig() ServerConfig {
+func (s *GinServer) GetConfig() entities.ServerConfig {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.Config
 }
 
-func (s *GinServer) SetConfig(config ServerConfig) {
+func (s *GinServer) SetConfig(config entities.ServerConfig) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.Config = config

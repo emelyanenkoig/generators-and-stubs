@@ -1,8 +1,11 @@
-package control
+package servers
 
 import (
 	"fmt"
 	"github.com/gorilla/mux"
+	"gns/stub/env"
+	"gns/stub/server/managed/balancing"
+	"gns/stub/server/managed/entities"
 	"log"
 	"net/http"
 	"sync"
@@ -10,17 +13,25 @@ import (
 )
 
 type NetHttpServer struct {
-	Config    ServerConfig
-	Balancer  Balancer
+	Config    entities.ServerConfig
+	Balancer  *balancing.Balancer
 	server    *http.Server
 	router    *mux.Router
 	mu        sync.RWMutex
 	isRunning bool
-	addr      string
-	port      string
+	Addr      string
+	Port      string
 	reqCount  uint
 	rpsMu     sync.Mutex
 	startTime time.Time
+}
+
+func NewNetHttpServer(env env.Environment) *NetHttpServer {
+	return &NetHttpServer{
+		Addr:     env.ServerAddr,
+		Port:     env.ServerPort,
+		Balancer: balancing.InitBalancer(),
+	}
 }
 
 func (s *NetHttpServer) InitManagedServer() {
@@ -33,7 +44,7 @@ func (s *NetHttpServer) InitManagedServer() {
 	s.router.Use(s.serverAccessControlMiddlewareNetHttp) // middleware
 
 	s.server = &http.Server{
-		Addr:           fmt.Sprintf("%s:%s", s.addr, s.port),
+		Addr:           fmt.Sprintf("%s:%s", s.Addr, s.Port),
 		Handler:        s.router,
 		ReadTimeout:    5 * time.Second,
 		WriteTimeout:   5 * time.Second,
@@ -43,10 +54,10 @@ func (s *NetHttpServer) InitManagedServer() {
 }
 
 func (s *NetHttpServer) RunManagedServer() {
-	log.Printf("Managed Server is starting on port %s (net/http)...", s.port)
+	log.Printf("Managed Server is starting on port %s (net/http)...", s.Port)
 	s.SetRunning(true)
 	if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("Could not listen on :%s: %v\n", s.port, err)
+		log.Fatalf("Could not listen on :%s: %v\n", s.Port, err)
 	}
 }
 
@@ -61,11 +72,11 @@ func (s *NetHttpServer) SetRunning(v bool) {
 	s.isRunning = v
 }
 
-func (s *NetHttpServer) GetConfig() ServerConfig {
+func (s *NetHttpServer) GetConfig() entities.ServerConfig {
 	return s.Config
 }
 
-func (s *NetHttpServer) SetConfig(config ServerConfig) {
+func (s *NetHttpServer) SetConfig(config entities.ServerConfig) {
 	s.Config = config
 }
 
