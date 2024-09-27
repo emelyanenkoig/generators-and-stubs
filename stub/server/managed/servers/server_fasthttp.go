@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"github.com/valyala/fasthttp"
 	"gns/stub/env"
+	"gns/stub/log"
 	"gns/stub/server/managed/balancing"
 	"gns/stub/server/managed/entities"
-	"log"
+	"go.uber.org/zap"
 	"sync"
 	"time"
 )
@@ -22,6 +23,7 @@ type FastHTTPServer struct {
 	reqCount  uint
 	rpsMu     sync.Mutex
 	startTime time.Time
+	logger    *zap.Logger
 }
 
 func NewFastHTTPServer(env env.Environment) *FastHTTPServer {
@@ -29,6 +31,7 @@ func NewFastHTTPServer(env env.Environment) *FastHTTPServer {
 		Addr:     env.ServerAddr,
 		Port:     env.ServerPort,
 		Balancer: balancing.InitBalancer(),
+		logger:   log.InitLogger(env.LogLevel),
 	}
 }
 
@@ -47,10 +50,10 @@ func (s *FastHTTPServer) InitManagedServer() {
 }
 
 func (s *FastHTTPServer) RunManagedServer() {
-	log.Printf("Managed Server is starting on port %s (fasthttp)...", s.Port)
+	//log.Printf("Managed Server is starting on  %s:%s (fasthttp)...", s.Addr, s.Port)
 	s.SetRunning(true)
 	if err := s.server.ListenAndServe(fmt.Sprintf(":%s", s.Port)); err != nil {
-		log.Fatalf("Could not listen on :%s %v\n", s.Port, err)
+		//log.Fatalf("Could not listen on :%s %v\n", s.Port, err)
 	}
 }
 
@@ -136,7 +139,7 @@ func (s *FastHTTPServer) RouteHandlerFastHTTP(ctx *fasthttp.RequestCtx) {
 		ctx.SetStatusCode(fasthttp.StatusOK)
 		_, err := ctx.WriteString(response.Body)
 		if err != nil {
-			log.Printf("Error writing response: %v", err)
+			//log.Printf("Error writing response: %v", err)
 		}
 		return
 	}

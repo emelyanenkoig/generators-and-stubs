@@ -3,24 +3,25 @@ package main
 import (
 	"fmt"
 	"gns/stub/env"
+	"gns/stub/log"
 	"gns/stub/server/control"
-	"log"
+	"go.uber.org/zap"
 	"runtime"
 	"sync"
 )
 
-// TODO добавить логгирование
-// TODO Сделать отключаемый и включаемый logger из ENV
-// + проверка на ошибочный путь
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	f := env.ReadENV()
+
+	logger := log.InitLogger(f.LogLevel)
+	defer logger.Sync()
 
 	controlServer := control.NewControlServer(f)
 
 	err := controlServer.LoadServerConfig(fmt.Sprintf("%s", f.ResponseFilePath))
 	if err != nil {
-		log.Fatalf("Error loading Server Config: %v", err)
+		logger.Fatal("Error loading Server Config:", zap.Error(err))
 	}
 
 	var wg sync.WaitGroup
@@ -30,6 +31,7 @@ func main() {
 		controlServer.RunManagedServer()
 		wg.Done()
 	}()
+
 	controlServer.InitControlServer()
 	controlServer.RunControlServer()
 

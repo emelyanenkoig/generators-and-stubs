@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"github.com/gorilla/mux"
 	"gns/stub/env"
+	"gns/stub/log"
 	"gns/stub/server/managed/balancing"
 	"gns/stub/server/managed/entities"
-	"log"
+	"go.uber.org/zap"
 	"net/http"
 	"sync"
 	"time"
@@ -24,6 +25,7 @@ type NetHttpServer struct {
 	reqCount  uint
 	rpsMu     sync.Mutex
 	startTime time.Time
+	logger    *zap.Logger
 }
 
 func NewNetHttpServer(env env.Environment) *NetHttpServer {
@@ -31,6 +33,7 @@ func NewNetHttpServer(env env.Environment) *NetHttpServer {
 		Addr:     env.ServerAddr,
 		Port:     env.ServerPort,
 		Balancer: balancing.InitBalancer(),
+		logger:   log.InitLogger(env.LogLevel),
 	}
 }
 
@@ -54,10 +57,10 @@ func (s *NetHttpServer) InitManagedServer() {
 }
 
 func (s *NetHttpServer) RunManagedServer() {
-	log.Printf("Managed Server is starting on port %s (net/http)...", s.Port)
+	//log.Printf("Managed Server is starting on  %s:%s (net/http)...", s.Addr, s.Port)
 	s.SetRunning(true)
 	if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("Could not listen on :%s: %v\n", s.Port, err)
+		//log.Fatalf("Could not listen on :%s: %v\n", s.Port, err)
 	}
 }
 

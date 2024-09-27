@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"gns/stub/env"
+	"gns/stub/log"
 	"gns/stub/server/managed/balancing"
 	"gns/stub/server/managed/entities"
-	"log"
+	"go.uber.org/zap"
 	"net/http"
 	"sync"
 	"time"
@@ -24,6 +25,7 @@ type GinServer struct {
 	reqCount  uint
 	rpsMu     sync.Mutex
 	startTime time.Time
+	logger    *zap.Logger
 }
 
 func NewGinServer(env env.Environment) *GinServer {
@@ -31,10 +33,12 @@ func NewGinServer(env env.Environment) *GinServer {
 		Addr:     env.ServerAddr,
 		Port:     env.ServerPort,
 		Balancer: balancing.InitBalancer(),
+		logger:   log.InitLogger(env.LogLevel),
 	}
 }
 
 func (s *GinServer) InitManagedServer() {
+	s.logger.Debug("Initializing managed server (Gin)", zap.String("address", s.Addr), zap.String("port", s.Port))
 	gin.SetMode(gin.ReleaseMode)
 	s.router = gin.New()
 
@@ -71,10 +75,10 @@ func (s *GinServer) InitManagedServer() {
 }
 
 func (s *GinServer) RunManagedServer() {
-	log.Printf("Managed Server is starting on port %s (gin)...", s.Port)
+	s.logger.Info("Running managed server (Gin)", zap.String("address", s.Addr), zap.String("port", s.Port))
 	s.SetRunning(true)
-	if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("Could not listen on :%s: %v\n", s.Port, err)
+	if err := s.server.ListenAndServe(); err != nil {
+		s.logger.Fatal("Error starting Gin server", zap.Error(err))
 	}
 
 }
@@ -91,18 +95,21 @@ func (s *GinServer) SetRunning(v bool) {
 	if v == false {
 		s.startTime = time.Time{}
 	}
+	s.logger.Debug("Managed server running state set to", zap.Bool("running", v))
 	s.isRunning = v
 }
 
 func (s *GinServer) GetConfig() entities.ServerConfig {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	s.logger.Debug("Get managed server config", zap.Any("config", s.Config))
 	return s.Config
 }
 
 func (s *GinServer) SetConfig(config entities.ServerConfig) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.logger.Debug("Managed server config is updated", zap.Any("config", config))
 	s.Config = config
 }
 
@@ -123,6 +130,7 @@ func (s *GinServer) serverAccessControlMiddlewareGin() gin.HandlerFunc {
 		s.mu.RLock()
 		if !s.isRunning {
 			s.mu.RUnlock()
+			s.logger.Debug("Managed server is not running", zap.String("method", c.Request.Method), zap.String("path", c.Request.URL.Path))
 			c.JSON(http.StatusServiceUnavailable, "Service Unavailable")
 			c.Abort()
 			return
@@ -131,6 +139,8 @@ func (s *GinServer) serverAccessControlMiddlewareGin() gin.HandlerFunc {
 
 		s.rpsMu.Lock()
 		s.reqCount++
+		s.logger.Debug("Middleware", zap.String("method", c.Request.Method), zap.String("path", c.Request.URL.Path), zap.Uint("reqCount", s.reqCount))
+
 		s.rpsMu.Unlock()
 
 		c.Next()
