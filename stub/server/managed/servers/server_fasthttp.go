@@ -36,6 +36,7 @@ func NewFastHTTPServer(env env.Environment) *FastHTTPServer {
 }
 
 func (s *FastHTTPServer) InitManagedServer() {
+	s.logger.Debug("Initializing managed server (fastHttp)", zap.String("address", s.Addr), zap.String("port", s.Port))
 	s.server = &fasthttp.Server{
 		Handler: func(ctx *fasthttp.RequestCtx) {
 			s.serverAccessControlMiddlewareFastHTTP(ctx)
@@ -50,10 +51,10 @@ func (s *FastHTTPServer) InitManagedServer() {
 }
 
 func (s *FastHTTPServer) RunManagedServer() {
-	//log.Printf("Managed Server is starting on  %s:%s (fasthttp)...", s.Addr, s.Port)
+	s.logger.Info("Running managed server (fastHttp)", zap.String("address", s.Addr), zap.String("port", s.Port))
 	s.SetRunning(true)
 	if err := s.server.ListenAndServe(fmt.Sprintf(":%s", s.Port)); err != nil {
-		//log.Fatalf("Could not listen on :%s %v\n", s.Port, err)
+		s.logger.Fatal("Error starting Gin server", zap.Error(err))
 	}
 }
 
@@ -69,18 +70,21 @@ func (s *FastHTTPServer) SetRunning(v bool) {
 	if v != true {
 		s.startTime = time.Time{}
 	}
+	s.logger.Debug("Managed server running state set to", zap.Bool("running", v))
 	s.isRunning = v
 }
 
 func (s *FastHTTPServer) GetConfig() entities.ServerConfig {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	s.logger.Debug("Get managed server config", zap.Any("config", s.Config))
 	return s.Config
 }
 
 func (s *FastHTTPServer) SetConfig(config entities.ServerConfig) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.logger.Debug("Managed server config is updated", zap.Any("config", config))
 	s.Config = config
 }
 
@@ -108,16 +112,21 @@ func (s *FastHTTPServer) serverAccessControlMiddlewareFastHTTP(ctx *fasthttp.Req
 	if !s.IsRunning() {
 		ctx.SetStatusCode(fasthttp.StatusServiceUnavailable)
 		_, _ = ctx.WriteString("Service Unavailable")
-		return
+		s.logger.Debug("Managed server is not running")
 	}
 
-	// Обновляем счетчик TPS
-	s.rpsMu.Lock()
-	s.reqCount++
-	s.rpsMu.Unlock()
+	go func() {
+		s.rpsMu.Lock()
+		defer s.rpsMu.Unlock()
+		s.reqCount++
+	}()
 
-	// Здесь вызываем обработчик
 	s.RouteHandlerFastHTTP(ctx)
+	s.logger.Debug("Managed server is not running",
+		zap.ByteString("method", ctx.Request.Header.Method()),
+		zap.ByteString("path", ctx.Request.URI().Path()),
+		zap.Uint("reqCount", s.reqCount),
+	)
 }
 
 // Обработчик для управляемого сервера

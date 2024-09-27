@@ -45,21 +45,21 @@ func NewControlServer(env env.Environment) *ControlServer {
 	return cs
 }
 
-func (cs *ControlServer) InitControlServer() {
+func (s *ControlServer) InitControlServer() {
 	gin.SetMode(gin.ReleaseMode)
-	cs.log.Debug("Initializing control server", zap.String("address", cs.addr), zap.String("port", cs.port))
+	s.log.Debug("Initializing control server", zap.String("address", s.addr), zap.String("port", s.port))
 
 	// Инициализация роутеров и эндпоинтов
 	r := gin.New()
-	r.GET("/rest/api/v1/server/config", cs.GetControlServerConfig)
-	r.POST("/rest/api/v1/server/config", cs.UpdateControlServerConfig)
-	r.DELETE("/rest/api/v1/server/config", cs.DeleteControlServerConfig)
-	r.POST("/rest/api/v1/server/start", cs.StartManagedServer)
-	r.POST("/rest/api/v1/server/stop", cs.StopManagedServer)
-	r.GET("/rest/api/v1/server/status", cs.StatusControlServer)
+	r.GET("/rest/api/v1/server/config", s.GetControlServerConfig)
+	r.POST("/rest/api/v1/server/config", s.UpdateControlServerConfig)
+	r.DELETE("/rest/api/v1/server/config", s.DeleteControlServerConfig)
+	r.POST("/rest/api/v1/server/start", s.StartManagedServer)
+	r.POST("/rest/api/v1/server/stop", s.StopManagedServer)
+	r.GET("/rest/api/v1/server/status", s.StatusControlServer)
 
-	cs.ControlServer = &http.Server{
-		Addr:           fmt.Sprintf("%s:%s", cs.addr, cs.port),
+	s.ControlServer = &http.Server{
+		Addr:           fmt.Sprintf("%s:%s", s.addr, s.port),
 		Handler:        r,
 		ReadTimeout:    5 * time.Second,
 		WriteTimeout:   5 * time.Second,
@@ -68,77 +68,77 @@ func (cs *ControlServer) InitControlServer() {
 	}
 }
 
-func (cs *ControlServer) RunControlServer() {
-	cs.log.Info("Running control server",
-		zap.String("address", cs.addr),
-		zap.String("port", cs.port))
-	if err := cs.ControlServer.ListenAndServe(); err != nil {
-		cs.log.Fatal("Failed to start control server", zap.Error(err))
+func (s *ControlServer) RunControlServer() {
+	s.log.Info("Running control server",
+		zap.String("address", s.addr),
+		zap.String("port", s.port))
+	if err := s.ControlServer.ListenAndServe(); err != nil {
+		s.log.Fatal("Failed to start control server", zap.Error(err))
 	}
 }
 
-func (cs *ControlServer) GetControlServerConfig(c *gin.Context) {
-	cs.mu.RLock()
-	defer cs.mu.RUnlock()
-	c.JSON(http.StatusOK, cs.ManagedServer.GetConfig())
+func (s *ControlServer) GetControlServerConfig(c *gin.Context) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	c.JSON(http.StatusOK, s.ManagedServer.GetConfig())
 }
 
-func (cs *ControlServer) UpdateControlServerConfig(c *gin.Context) {
+func (s *ControlServer) UpdateControlServerConfig(c *gin.Context) {
 	var newConfig entities.ServerConfig
 	if err := c.ShouldBindJSON(&newConfig); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid configuration"})
 		return
 	}
-	cs.mu.Lock()
-	defer cs.mu.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	cs.ManagedServer.SetConfig(newConfig)
+	s.ManagedServer.SetConfig(newConfig)
 	c.String(http.StatusOK, "The configuration has been successfully applied")
-	cs.log.Debug("The configuration of managed server has been successfully applied")
+	s.log.Debug("The configuration of managed server has been successfully applied")
 }
 
-func (cs *ControlServer) DeleteControlServerConfig(c *gin.Context) {
-	cs.mu.Lock()
-	defer cs.mu.Unlock()
-	cs.ManagedServer.SetConfig(entities.ServerConfig{})
+func (s *ControlServer) DeleteControlServerConfig(c *gin.Context) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.ManagedServer.SetConfig(entities.ServerConfig{})
 	c.String(http.StatusOK, "Configuration deleted successfully")
-	cs.log.Debug("Managed server config deleted")
+	s.log.Debug("Managed server config deleted")
 }
 
-func (cs *ControlServer) StartManagedServer(c *gin.Context) {
-	cs.mu.Lock()
-	defer cs.mu.Unlock()
+func (s *ControlServer) StartManagedServer(c *gin.Context) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	if cs.ManagedServer.IsRunning() {
-		cs.log.Debug("Attempted to start managed server as already running")
+	if s.ManagedServer.IsRunning() {
+		s.log.Debug("Attempted to start managed server as already running")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Server already running"})
 		return
 	}
 
-	cs.ManagedServer.SetRunning(true)
+	s.ManagedServer.SetRunning(true)
 	c.String(http.StatusOK, "Server started successfully")
-	cs.log.Debug("Managed server started successfully")
+	s.log.Debug("Managed server started successfully")
 }
 
-func (cs *ControlServer) StopManagedServer(c *gin.Context) {
-	cs.mu.Lock()
-	defer cs.mu.Unlock()
+func (s *ControlServer) StopManagedServer(c *gin.Context) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	if !cs.ManagedServer.IsRunning() {
+	if !s.ManagedServer.IsRunning() {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Server is not running"})
 		return
 	}
 
-	cs.ManagedServer.SetRunning(false)
+	s.ManagedServer.SetRunning(false)
 	c.String(http.StatusOK, "Server stopped successfully")
-	cs.log.Debug("Managed server stopped successfully")
+	s.log.Debug("Managed server stopped successfully")
 }
 
-func (cs *ControlServer) StatusControlServer(c *gin.Context) {
-	cs.mu.RLock()
-	defer cs.mu.RUnlock()
+func (s *ControlServer) StatusControlServer(c *gin.Context) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
-	seconds := time.Since(cs.ManagedServer.GetTimeSinceStart()).Seconds()
+	seconds := time.Since(s.ManagedServer.GetTimeSinceStart()).Seconds()
 
 	status := struct {
 		Running    bool    `json:"running"`
@@ -146,25 +146,25 @@ func (cs *ControlServer) StatusControlServer(c *gin.Context) {
 		AvgLatency float64 `json:"avg_latency"`
 		Duration   float64 `json:"duration"`
 	}{
-		Running:    cs.ManagedServer.IsRunning(),
-		TPS:        cs.ManagedServer.GetReqSinceStart() / uint(seconds),
+		Running:    s.ManagedServer.IsRunning(),
+		TPS:        s.ManagedServer.GetReqSinceStart() / uint(seconds),
 		AvgLatency: 1.0, // Заглушка для средней задержки
 		Duration:   seconds,
 	}
 	c.JSON(http.StatusOK, status)
-	cs.log.Debug("Managed server status", zap.Any("status", status))
+	s.log.Debug("Managed server status", zap.Any("status", status))
 }
 
-func (cs *ControlServer) InitManagedServer() {
-	cs.ManagedServer.InitManagedServer() // Инициализация сервера
+func (s *ControlServer) InitManagedServer() {
+	s.ManagedServer.InitManagedServer() // Инициализация сервера
 }
 
-func (cs *ControlServer) RunManagedServer() {
-	cs.ManagedServer.RunManagedServer() // Запуск сервера
+func (s *ControlServer) RunManagedServer() {
+	s.ManagedServer.RunManagedServer() // Запуск сервера
 }
 
 // Load initial ManagedServer configuration from file
-func (cs *ControlServer) LoadServerConfig(filePath string) error {
+func (s *ControlServer) LoadServerConfig(filePath string) error {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return err
@@ -177,7 +177,7 @@ func (cs *ControlServer) LoadServerConfig(filePath string) error {
 	if err != nil {
 		return err
 	}
-	cs.ManagedServer.SetConfig(newConfig)
-	cs.log.Debug("Loaded config from", zap.String("config", filePath))
+	s.ManagedServer.SetConfig(newConfig)
+	s.log.Debug("Loaded config from", zap.String("config", filePath))
 	return nil
 }

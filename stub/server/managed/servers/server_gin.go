@@ -40,8 +40,8 @@ func NewGinServer(env env.Environment) *GinServer {
 func (s *GinServer) InitManagedServer() {
 	s.logger.Debug("Initializing managed server (Gin)", zap.String("address", s.Addr), zap.String("port", s.Port))
 	gin.SetMode(gin.ReleaseMode)
-	s.router = gin.New()
 
+	s.router = gin.New()
 	s.router.Use(s.serverAccessControlMiddlewareGin())
 
 	s.router.GET("/", func(c *gin.Context) {
@@ -128,21 +128,26 @@ func (s *GinServer) GetReqSinceStart() uint {
 func (s *GinServer) serverAccessControlMiddlewareGin() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		s.mu.RLock()
+		defer s.mu.RUnlock()
+
+		if s.startTime.IsZero() {
+			s.startTime = time.Now()
+		}
+
 		if !s.isRunning {
-			s.mu.RUnlock()
-			s.logger.Debug("Managed server is not running", zap.String("method", c.Request.Method), zap.String("path", c.Request.URL.Path))
 			c.JSON(http.StatusServiceUnavailable, "Service Unavailable")
 			c.Abort()
+			s.logger.Debug("Managed server is not running")
 			return
 		}
-		s.mu.RUnlock()
 
-		s.rpsMu.Lock()
-		s.reqCount++
-		s.logger.Debug("Middleware", zap.String("method", c.Request.Method), zap.String("path", c.Request.URL.Path), zap.Uint("reqCount", s.reqCount))
-
-		s.rpsMu.Unlock()
-
+		go func() {
+			s.rpsMu.Lock()
+			defer s.rpsMu.Unlock()
+			s.reqCount++
+		}()
 		c.Next()
+
+		s.logger.Debug("Middleware", zap.String("method", c.Request.Method), zap.String("path", c.Request.URL.Path), zap.Uint("reqCount", s.reqCount))
 	}
 }

@@ -13,6 +13,7 @@ import (
 	"time"
 )
 
+// реализовать get active conns
 type NetHttpServer struct {
 	Config    entities.ServerConfig
 	Balancer  *balancing.Balancer
@@ -38,6 +39,7 @@ func NewNetHttpServer(env env.Environment) *NetHttpServer {
 }
 
 func (s *NetHttpServer) InitManagedServer() {
+	s.logger.Debug("Initializing managed server (net/http)", zap.String("address", s.Addr), zap.String("port", s.Port))
 	s.router = mux.NewRouter()
 
 	for _, pathConfig := range s.Config.Paths {
@@ -57,37 +59,52 @@ func (s *NetHttpServer) InitManagedServer() {
 }
 
 func (s *NetHttpServer) RunManagedServer() {
-	//log.Printf("Managed Server is starting on  %s:%s (net/http)...", s.Addr, s.Port)
+	s.logger.Info("Running managed server (net/http)", zap.String("address", s.Addr), zap.String("port", s.Port))
 	s.SetRunning(true)
 	if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		//log.Fatalf("Could not listen on :%s: %v\n", s.Port, err)
+		s.logger.Fatal("Error starting net/http server", zap.Error(err))
 	}
 }
 
 func (s *NetHttpServer) IsRunning() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return s.isRunning
 }
 
 func (s *NetHttpServer) SetRunning(v bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if v == false {
 		s.startTime = time.Time{}
 	}
+	s.logger.Debug("Managed server running state set to", zap.Bool("running", v))
 	s.isRunning = v
 }
 
 func (s *NetHttpServer) GetConfig() entities.ServerConfig {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	s.logger.Debug("Get managed server config", zap.Any("config", s.Config))
 	return s.Config
 }
 
 func (s *NetHttpServer) SetConfig(config entities.ServerConfig) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.logger.Debug("Managed server config is updated", zap.Any("config", config))
 	s.Config = config
 }
 
 func (s *NetHttpServer) GetTimeSinceStart() time.Time {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return s.startTime
 }
 
 func (s *NetHttpServer) GetReqSinceStart() uint {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return s.reqCount
 }
 
@@ -130,6 +147,7 @@ func (s *NetHttpServer) serverAccessControlMiddlewareNetHttp(next http.Handler) 
 
 		if !s.isRunning {
 			http.Error(w, "Service Unavailable", http.StatusServiceUnavailable)
+			s.logger.Debug("Managed server is not running")
 			return
 		}
 
@@ -138,6 +156,9 @@ func (s *NetHttpServer) serverAccessControlMiddlewareNetHttp(next http.Handler) 
 			defer s.rpsMu.Unlock()
 			s.reqCount++
 		}()
+
 		next.ServeHTTP(w, r)
+
+		s.logger.Debug("Middleware", zap.String("method", r.Method), zap.String("path", r.URL.Path), zap.Uint("reqCount", s.reqCount))
 	})
 }
