@@ -133,7 +133,6 @@ func (s *GinServer) serverAccessControlMiddlewareGin() gin.HandlerFunc {
 		if s.startTime.IsZero() {
 			s.startTime = time.Now()
 		}
-
 		if !s.isRunning {
 			c.JSON(http.StatusServiceUnavailable, "Service Unavailable")
 			c.Abort()
