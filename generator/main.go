@@ -10,16 +10,16 @@ import (
 )
 
 func main() {
-	configPath := flag.String("config", "config.json", "Path to configuration file")
+	configPath := flag.String("conf", "conf.json", "Path to configuration file")
 	flag.Parse()
 
-	config, err := config.LoadConfig(*configPath)
+	conf, err := config.LoadConfig(*configPath)
 	if err != nil {
-		log.Fatalf("Failed to load config: %v\n", err)
+		log.Fatalf("Failed to load conf: %v\n", err)
 	}
 
 	metricsCollector := metrics.NewMetricsCollector()
-	loadGen := loadgen.NewLoadGenerator(config)
+	loadGen := loadgen.NewLoadGenerator(conf)
 
 	log.Println("Starting load test...")
 	loadGen.Start()

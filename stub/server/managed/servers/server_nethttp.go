@@ -5,6 +5,7 @@ import (
 	"github.com/gorilla/mux"
 	"gns/stub/env"
 	"gns/stub/log"
+	"gns/stub/server/managed"
 	"gns/stub/server/managed/balancing"
 	"gns/stub/server/managed/entities"
 	"go.uber.org/zap"
@@ -27,6 +28,9 @@ type NetHttpServer struct {
 	rpsMu     sync.Mutex
 	startTime time.Time
 	logger    *zap.Logger
+	protocol  string
+	certFile  string
+	keyFile   string
 }
 
 func NewNetHttpServer(env env.Environment) *NetHttpServer {
@@ -35,6 +39,7 @@ func NewNetHttpServer(env env.Environment) *NetHttpServer {
 		Port:     env.ServerPort,
 		Balancer: balancing.InitBalancer(),
 		logger:   log.InitLogger(env.LogLevel),
+		protocol: env.ProtocolVersion,
 	}
 }
 
@@ -56,13 +61,24 @@ func (s *NetHttpServer) InitManagedServer() {
 		IdleTimeout:    10 * time.Second,
 		MaxHeaderBytes: 1 << 20,
 	}
+	s.setProtocolOfServer()
+
 }
 
 func (s *NetHttpServer) RunManagedServer() {
 	s.logger.Info("Running managed server (net/http)", zap.String("address", s.Addr), zap.String("port", s.Port))
 	s.SetRunning(true)
-	if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		s.logger.Fatal("Error starting net/http server", zap.Error(err))
+	if s.protocol == managed.HTTP20 {
+		err := s.server.ListenAndServeTLS(s.certFile, s.keyFile)
+		if err != nil {
+			s.logger.Fatal("Error starting net/http server", zap.Error(err))
+		}
+	} else {
+		err := s.server.ListenAndServe()
+		if err != nil {
+			s.logger.Fatal("Error starting net/http server", zap.Error(err))
+		}
+
 	}
 }
 
@@ -134,21 +150,26 @@ func (s *NetHttpServer) routeHandler(w http.ResponseWriter, r *http.Request) {
 	http.NotFound(w, r)
 }
 
-// TODO Сделать middleware тоже структурой с интерфейсом
 // Middleware to control access to the managed NetHttpServer
 func (s *NetHttpServer) serverAccessControlMiddlewareNetHttp(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s.mu.RLock()
 		defer s.mu.RUnlock()
 
-		if s.startTime.IsZero() {
-			s.startTime = time.Now()
-		}
-
 		if !s.isRunning {
 			http.Error(w, "Service Unavailable", http.StatusServiceUnavailable)
 			s.logger.Debug("Managed server is not running")
 			return
+		}
+
+		if err := s.checkRequestProtocolIsValid(r); err != nil {
+			http.Error(w, "Invalid protocol of request", http.StatusBadRequest)
+			s.logger.Error("Invalid protocol of request", zap.Error(err))
+			return
+		}
+
+		if s.startTime.IsZero() {
+			s.startTime = time.Now()
 		}
 
 		go func() {
@@ -161,4 +182,41 @@ func (s *NetHttpServer) serverAccessControlMiddlewareNetHttp(next http.Handler) 
 
 		s.logger.Debug("Middleware", zap.String("method", r.Method), zap.String("path", r.URL.Path), zap.Uint("reqCount", s.reqCount))
 	})
+}
+
+func (s *NetHttpServer) checkRequestProtocolIsValid(r *http.Request) error {
+	switch s.protocol {
+	case "HTTP/1.0":
+		if r.ProtoMajor != 1 || r.ProtoMinor != 0 {
+			return fmt.Errorf("HTTP/1.0 requests only")
+		}
+
+	case "HTTP/2.0":
+		if r.ProtoMajor != 2 || r.ProtoMinor != 0 {
+			return fmt.Errorf("HTTP/2.0 requests only")
+		}
+	default:
+		if r.ProtoMajor != 1 || r.ProtoMinor != 1 {
+			return fmt.Errorf("HTTP/1.1 requests only")
+		}
+	}
+	return nil
+
+}
+
+func (s *NetHttpServer) setProtocolOfServer() {
+	switch s.protocol {
+	case "HTTP/1.0":
+		s.server.SetKeepAlivesEnabled(false)
+		s.logger.Info("Using HTTP/1.0 protocol")
+
+	case "HTTP/2.0":
+		// HTTP/2 включен по умолчанию при использовании TLS, но можно настроить вручную
+		s.certFile = "server.crt"
+		s.keyFile = "server.key"
+		s.logger.Info("Using HTTP/2.0 protocol")
+	default:
+		// По умолчанию HTTP/1.1
+		s.logger.Info("Using HTTP/1.1 protocol")
+	}
 }
