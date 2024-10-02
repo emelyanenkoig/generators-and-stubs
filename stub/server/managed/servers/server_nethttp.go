@@ -28,7 +28,7 @@ type NetHttpServer struct {
 	rpsMu     sync.Mutex
 	startTime time.Time
 	logger    *zap.Logger
-	protocol  string
+	proto     string
 	certFile  string
 	keyFile   string
 }
@@ -39,7 +39,7 @@ func NewNetHttpServer(env env.Environment) *NetHttpServer {
 		Port:     env.ServerPort,
 		Balancer: balancing.InitBalancer(),
 		logger:   log.InitLogger(env.LogLevel),
-		protocol: env.ProtocolVersion,
+		proto:    env.ProtocolVersion,
 	}
 }
 
@@ -66,19 +66,25 @@ func (s *NetHttpServer) InitManagedServer() {
 }
 
 func (s *NetHttpServer) RunManagedServer() {
-	s.logger.Info("Running managed server (net/http)", zap.String("address", s.Addr), zap.String("port", s.Port))
+	s.logger.Info("Running managed server (net/http)", zap.String("address", s.Addr), zap.String("port", s.Port), zap.String("Server protocol", s.proto))
 	s.SetRunning(true)
-	if s.protocol == managed.HTTP20 {
+
+	switch s.proto {
+	case managed.HTTP20:
 		err := s.server.ListenAndServeTLS(s.certFile, s.keyFile)
 		if err != nil {
 			s.logger.Fatal("Error starting net/http server", zap.Error(err))
 		}
-	} else {
+	case managed.HTTP10:
 		err := s.server.ListenAndServe()
 		if err != nil {
 			s.logger.Fatal("Error starting net/http server", zap.Error(err))
 		}
-
+	case managed.HTTP11:
+		err := s.server.ListenAndServe()
+		if err != nil {
+			s.logger.Fatal("Error starting net/http server", zap.Error(err))
+		}
 	}
 }
 
@@ -163,8 +169,8 @@ func (s *NetHttpServer) serverAccessControlMiddlewareNetHttp(next http.Handler) 
 		}
 
 		if err := s.checkRequestProtocolIsValid(r); err != nil {
-			http.Error(w, "Invalid protocol of request", http.StatusBadRequest)
-			s.logger.Error("Invalid protocol of request", zap.Error(err))
+			http.Error(w, "Invalid proto of request", http.StatusBadRequest)
+			s.logger.Error("Invalid proto of request", zap.Error(err))
 			return
 		}
 
@@ -185,13 +191,12 @@ func (s *NetHttpServer) serverAccessControlMiddlewareNetHttp(next http.Handler) 
 }
 
 func (s *NetHttpServer) checkRequestProtocolIsValid(r *http.Request) error {
-	switch s.protocol {
-	case "HTTP/1.0":
+	switch s.proto {
+	case managed.HTTP10:
 		if r.ProtoMajor != 1 || r.ProtoMinor != 0 {
 			return fmt.Errorf("HTTP/1.0 requests only")
 		}
-
-	case "HTTP/2.0":
+	case managed.HTTP20:
 		if r.ProtoMajor != 2 || r.ProtoMinor != 0 {
 			return fmt.Errorf("HTTP/2.0 requests only")
 		}
@@ -205,18 +210,15 @@ func (s *NetHttpServer) checkRequestProtocolIsValid(r *http.Request) error {
 }
 
 func (s *NetHttpServer) setProtocolOfServer() {
-	switch s.protocol {
-	case "HTTP/1.0":
+	switch s.proto {
+	case managed.HTTP10:
 		s.server.SetKeepAlivesEnabled(false)
-		s.logger.Info("Using HTTP/1.0 protocol")
-
-	case "HTTP/2.0":
-		// HTTP/2 включен по умолчанию при использовании TLS, но можно настроить вручную
+		s.logger.Info("Using HTTP/1.0 proto")
+	case managed.HTTP20:
 		s.certFile = "server.crt"
 		s.keyFile = "server.key"
-		s.logger.Info("Using HTTP/2.0 protocol")
+		s.logger.Info("Using HTTP/2.0 proto")
 	default:
-		// По умолчанию HTTP/1.1
-		s.logger.Info("Using HTTP/1.1 protocol")
+		s.logger.Info("Using HTTP/1.1 proto")
 	}
 }

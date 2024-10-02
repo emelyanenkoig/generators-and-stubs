@@ -5,6 +5,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gns/stub/env"
 	"gns/stub/log"
+	"gns/stub/server/managed"
 	"gns/stub/server/managed/balancing"
 	"gns/stub/server/managed/entities"
 	"go.uber.org/zap"
@@ -26,6 +27,9 @@ type GinServer struct {
 	rpsMu     sync.Mutex
 	startTime time.Time
 	logger    *zap.Logger
+	proto     string
+	certFile  string
+	keyFile   string
 }
 
 func NewGinServer(env env.Environment) *GinServer {
@@ -34,6 +38,7 @@ func NewGinServer(env env.Environment) *GinServer {
 		Port:     env.ServerPort,
 		Balancer: balancing.InitBalancer(),
 		logger:   log.InitLogger(env.LogLevel),
+		proto:    env.ProtocolVersion,
 	}
 }
 
@@ -72,15 +77,30 @@ func (s *GinServer) InitManagedServer() {
 		IdleTimeout:    10 * time.Second,
 		MaxHeaderBytes: 1 << 20,
 	}
+	s.setProtocolOfServer()
 }
 
 func (s *GinServer) RunManagedServer() {
 	s.logger.Info("Running managed server (Gin)", zap.String("address", s.Addr), zap.String("port", s.Port))
 	s.SetRunning(true)
-	if err := s.server.ListenAndServe(); err != nil {
-		s.logger.Fatal("Error starting Gin server", zap.Error(err))
-	}
 
+	switch s.proto {
+	case managed.HTTP20:
+		err := s.server.ListenAndServeTLS(s.certFile, s.keyFile)
+		if err != nil {
+			s.logger.Fatal("Error starting gin server", zap.Error(err))
+		}
+	case managed.HTTP10:
+		err := s.server.ListenAndServe()
+		if err != nil {
+			s.logger.Fatal("Error starting gin server", zap.Error(err))
+		}
+	case managed.HTTP11:
+		err := s.server.ListenAndServe()
+		if err != nil {
+			s.logger.Fatal("Error starting gin server", zap.Error(err))
+		}
+	}
 }
 
 func (s *GinServer) IsRunning() bool {
@@ -130,14 +150,21 @@ func (s *GinServer) serverAccessControlMiddlewareGin() gin.HandlerFunc {
 		s.mu.RLock()
 		defer s.mu.RUnlock()
 
-		if s.startTime.IsZero() {
-			s.startTime = time.Now()
-		}
 		if !s.isRunning {
 			c.JSON(http.StatusServiceUnavailable, "Service Unavailable")
 			c.Abort()
 			s.logger.Debug("Managed server is not running")
 			return
+		}
+
+		if err := s.checkRequestProtocolIsValid(c); err != nil {
+			c.JSON(http.StatusBadRequest, "Invalid proto of request")
+			s.logger.Error("Invalid proto of request", zap.Error(err))
+			return
+		}
+
+		if s.startTime.IsZero() {
+			s.startTime = time.Now()
 		}
 
 		go func() {
@@ -148,5 +175,39 @@ func (s *GinServer) serverAccessControlMiddlewareGin() gin.HandlerFunc {
 		c.Next()
 
 		s.logger.Debug("Middleware", zap.String("method", c.Request.Method), zap.String("path", c.Request.URL.Path), zap.Uint("reqCount", s.reqCount))
+	}
+}
+
+func (s *GinServer) checkRequestProtocolIsValid(c *gin.Context) error {
+	switch s.proto {
+	case managed.HTTP10:
+		if c.Request.ProtoMajor != 1 || c.Request.ProtoMinor != 0 {
+			return fmt.Errorf("HTTP/1.0 requests only")
+		}
+	case managed.HTTP20:
+		if c.Request.ProtoMajor != 2 || c.Request.ProtoMinor != 0 {
+			return fmt.Errorf("HTTP/2.0 requests only")
+		}
+	default:
+		if c.Request.ProtoMajor != 1 || c.Request.ProtoMinor != 1 {
+			return fmt.Errorf("HTTP/1.1 requests only")
+		}
+	}
+	return nil
+
+}
+
+func (s *GinServer) setProtocolOfServer() {
+	switch s.proto {
+	case managed.HTTP10:
+		s.server.SetKeepAlivesEnabled(false)
+		s.logger.Info("Using HTTP/1.0 proto")
+
+	case managed.HTTP20:
+		s.certFile = "server.crt"
+		s.keyFile = "server.key"
+		s.logger.Info("Using HTTP/2.0 proto")
+	default:
+		s.logger.Info("Using HTTP/1.1 proto")
 	}
 }
