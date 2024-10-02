@@ -5,9 +5,11 @@ import (
 	"github.com/valyala/fasthttp"
 	"gns/stub/env"
 	"gns/stub/log"
+	"gns/stub/server/managed"
 	"gns/stub/server/managed/balancing"
 	"gns/stub/server/managed/entities"
 	"go.uber.org/zap"
+	"net/http"
 	"sync"
 	"time"
 )
@@ -24,6 +26,9 @@ type FastHTTPServer struct {
 	rpsMu     sync.Mutex
 	startTime time.Time
 	logger    *zap.Logger
+	proto     string
+	certFile  string
+	keyFile   string
 }
 
 func NewFastHTTPServer(env env.Environment) *FastHTTPServer {
@@ -32,6 +37,7 @@ func NewFastHTTPServer(env env.Environment) *FastHTTPServer {
 		Port:     env.ServerPort,
 		Balancer: balancing.InitBalancer(),
 		logger:   log.InitLogger(env.LogLevel),
+		proto:    env.ProtocolVersion,
 	}
 }
 
@@ -48,13 +54,32 @@ func (s *FastHTTPServer) InitManagedServer() {
 		WriteTimeout: 5 * time.Second,
 		IdleTimeout:  10 * time.Second,
 	}
+	s.setProtocolOfServer()
 }
 
 func (s *FastHTTPServer) RunManagedServer() {
 	s.logger.Info("Running managed server (fastHttp)", zap.String("address", s.Addr), zap.String("port", s.Port))
 	s.SetRunning(true)
-	if err := s.server.ListenAndServe(fmt.Sprintf(":%s", s.Port)); err != nil {
-		s.logger.Fatal("Error starting Gin server", zap.Error(err))
+
+	switch s.proto {
+	case managed.HTTP20:
+		// HTTP/2.0 с TLS
+		err := fasthttp.ListenAndServeTLS(fmt.Sprintf("%s:%s", s.Addr, s.Port), s.certFile, s.keyFile, s.server.Handler)
+		if err != nil {
+			s.logger.Fatal("Error starting HTTP/2 server", zap.Error(err))
+		}
+	case managed.HTTP10:
+		// HTTP/1.0 без TLS
+		err := fasthttp.ListenAndServe(fmt.Sprintf("%s:%s", s.Addr, s.Port), s.server.Handler)
+		if err != nil {
+			s.logger.Fatal("Error starting HTTP/1.0 server", zap.Error(err))
+		}
+	case managed.HTTP11:
+		// HTTP/1.1 (обычный режим)
+		err := fasthttp.ListenAndServe(fmt.Sprintf("%s:%s", s.Addr, s.Port), s.server.Handler)
+		if err != nil {
+			s.logger.Fatal("Error starting HTTP/1.1 server", zap.Error(err))
+		}
 	}
 }
 
@@ -100,19 +125,26 @@ func (s *FastHTTPServer) GetReqSinceStart() uint {
 	return s.reqCount
 }
 
-// Middleware для контроля доступа к управляемому серверу
 func (s *FastHTTPServer) serverAccessControlMiddlewareFastHTTP(ctx *fasthttp.RequestCtx) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	if s.startTime.IsZero() {
-		s.startTime = time.Now()
-	}
-
 	if !s.IsRunning() {
 		ctx.SetStatusCode(fasthttp.StatusServiceUnavailable)
-		_, _ = ctx.WriteString("Service Unavailable")
+		ctx.SetBodyString("Service Unavailable")
 		s.logger.Debug("Managed server is not running")
+		return
+	}
+
+	if err := s.checkRequestProtocolIsValid(ctx); err != nil {
+		ctx.SetStatusCode(fasthttp.StatusBadRequest)
+		ctx.SetBodyString(err.Error())
+		s.logger.Error("Invalid proto of request", zap.Error(err))
+		return
+	}
+
+	if s.startTime.IsZero() {
+		s.startTime = time.Now()
 	}
 
 	go func() {
@@ -122,14 +154,8 @@ func (s *FastHTTPServer) serverAccessControlMiddlewareFastHTTP(ctx *fasthttp.Req
 	}()
 
 	s.RouteHandlerFastHTTP(ctx)
-	s.logger.Debug("Managed server is not running",
-		zap.ByteString("method", ctx.Request.Header.Method()),
-		zap.ByteString("path", ctx.Request.URI().Path()),
-		zap.Uint("reqCount", s.reqCount),
-	)
 }
 
-// Обработчик для управляемого сервера
 func (s *FastHTTPServer) RouteHandlerFastHTTP(ctx *fasthttp.RequestCtx) {
 	path := string(ctx.Path())
 	s.mu.RLock()
@@ -148,10 +174,54 @@ func (s *FastHTTPServer) RouteHandlerFastHTTP(ctx *fasthttp.RequestCtx) {
 		ctx.SetStatusCode(fasthttp.StatusOK)
 		_, err := ctx.WriteString(response.Body)
 		if err != nil {
-			//log.Printf("Error writing response: %v", err)
+			s.logger.Error("Failed to write response", zap.Error(err))
 		}
 		return
 	}
 
 	ctx.SetStatusCode(fasthttp.StatusNotFound)
+	s.logger.Debug("Middleware", zap.ByteString("method", ctx.Method()), zap.ByteString("path", ctx.Path()), zap.Uint("reqCount", s.reqCount))
+}
+
+func (s *FastHTTPServer) checkRequestProtocolIsValid(ctx *fasthttp.RequestCtx) error {
+	// Проверяем протокол запроса
+	proto := string(ctx.Request.Header.Protocol())
+	switch s.proto {
+	case managed.HTTP10:
+		if proto != "HTTP/1.0" {
+			return fmt.Errorf("HTTP/1.0 requests only")
+		}
+		ctx.Response.Header.Set("Connection", "close")
+	case managed.HTTP20:
+		if proto != "HTTP/2.0" {
+			return fmt.Errorf("HTTP/2.0 requests only")
+		}
+	default:
+		if proto != "HTTP/1.1" {
+			return fmt.Errorf("HTTP/1.1 requests only")
+		}
+	}
+	return nil
+}
+
+func (s *FastHTTPServer) setProtocolOfServer() {
+	switch s.proto {
+	case managed.HTTP10:
+		s.server.DisableKeepalive = true
+		s.logger.Info("Using HTTP/1.0 proto")
+	case managed.HTTP20:
+		s.certFile = "server.crt"
+		s.keyFile = "server.key"
+		s.logger.Info("Using HTTP/2.0 proto")
+	default:
+		s.logger.Info("Using default HTTP/1.1 proto")
+	}
+}
+
+func (s *FastHTTPServer) fastHTTPHandlerWrapper(w http.ResponseWriter, r *http.Request) {
+	var ctx fasthttp.RequestCtx
+	ctx.Init(&fasthttp.Request{}, nil, nil)
+	s.serverAccessControlMiddlewareFastHTTP(&ctx)
+	w.Header().Set("Content-Type", "text/plain")
+	w.Write(ctx.Response.Body())
 }

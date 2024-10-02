@@ -84,23 +84,6 @@ func (s *GinServer) RunManagedServer() {
 	s.logger.Info("Running managed server (Gin)", zap.String("address", s.Addr), zap.String("port", s.Port))
 	s.SetRunning(true)
 
-	switch s.proto {
-	case managed.HTTP20:
-		err := s.server.ListenAndServeTLS(s.certFile, s.keyFile)
-		if err != nil {
-			s.logger.Fatal("Error starting gin server", zap.Error(err))
-		}
-	case managed.HTTP10:
-		err := s.server.ListenAndServe()
-		if err != nil {
-			s.logger.Fatal("Error starting gin server", zap.Error(err))
-		}
-	case managed.HTTP11:
-		err := s.server.ListenAndServe()
-		if err != nil {
-			s.logger.Fatal("Error starting gin server", zap.Error(err))
-		}
-	}
 }
 
 func (s *GinServer) IsRunning() bool {
