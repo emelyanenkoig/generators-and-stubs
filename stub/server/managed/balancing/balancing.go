@@ -6,6 +6,13 @@ import (
 	"math/rand"
 )
 
+const (
+	RoundRobin                     = "round-robin"
+	Weighted                       = "weighted"
+	Random                         = "random"
+	WeightedRandomWithBinarySearch = "weighted random with bs"
+)
+
 type Balancer struct {
 	RRobinIndex int
 }
@@ -20,13 +27,13 @@ func InitBalancer() *Balancer {
 // SelectResponse based on the strategy ("round-robin", "weight", "random")
 func (b *Balancer) SelectResponse(responseSet entities.ResponseSet) (error, entities.Response) {
 	switch responseSet.Choice {
-	case "round-robin":
+	case RoundRobin:
 		return nil, b.SelectRoundRobinResponse(responseSet)
-	case "weighted":
+	case Weighted:
 		return nil, b.SelectWeightedResponse(responseSet)
-	case "random":
+	case Random:
 		return nil, b.SelectRandomResponse(responseSet)
-	case "weighted random with bs":
+	case WeightedRandomWithBinarySearch:
 		return nil, b.SelectRandomWeightedResponse(responseSet)
 	default:
 		return fmt.Errorf("incorrect choice"), entities.Response{} // Default to the first response if choice is invalid

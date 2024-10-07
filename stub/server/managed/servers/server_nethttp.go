@@ -116,12 +116,35 @@ func (s *NetHttpServer) GetConfig() entities.ServerConfig {
 func (s *NetHttpServer) SetConfig(config entities.ServerConfig) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.logger.Debug("Managed server config is updated", zap.Any("config", config))
-	s.Config = config
+	if s.isValidConfigChoice() {
+		s.Config = config
+		s.UpdateRoutes()
+		s.logger.Debug("Managed server config is updated", zap.Any("config", config))
+		return
+	}
+	s.logger.Debug("Failed to update config, invalid config", zap.Any("config", config))
 
-	s.UpdateRoutes()
 }
 
+func (s *NetHttpServer) isValidConfigChoice() bool {
+
+	for _, path := range s.Config.Paths {
+		switch path.ResponseSet.Choice {
+		case balancing.Weighted:
+			continue
+		case balancing.Random:
+			continue
+		case balancing.RoundRobin:
+			continue
+		case balancing.WeightedRandomWithBinarySearch:
+			continue
+		default:
+			return false
+		}
+	}
+	return true
+
+}
 func (s *NetHttpServer) GetTimeSinceStart() time.Time {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
