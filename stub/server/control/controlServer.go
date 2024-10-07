@@ -82,7 +82,7 @@ func (s *ControlServer) GetControlServerConfig(c *gin.Context) {
 	defer s.mu.RUnlock()
 	config, exist := s.ManagedServer.GetConfig()
 	if !exist {
-		c.JSON(http.StatusNotFound, nil)
+		c.JSON(http.StatusOK, nil)
 		return
 	}
 	c.JSON(http.StatusOK, config)
