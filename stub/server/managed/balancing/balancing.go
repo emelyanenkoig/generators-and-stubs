@@ -1,6 +1,7 @@
 package balancing
 
 import (
+	"fmt"
 	"gns/stub/server/managed/entities"
 	"math/rand"
 )
@@ -17,16 +18,18 @@ func InitBalancer() *Balancer {
 }
 
 // SelectResponse based on the strategy ("round-robin", "weight", "random")
-func (b *Balancer) SelectResponse(responseSet entities.ResponseSet) entities.Response {
+func (b *Balancer) SelectResponse(responseSet entities.ResponseSet) (error, entities.Response) {
 	switch responseSet.Choice {
 	case "round-robin":
-		return b.SelectRoundRobinResponse(responseSet)
-	case "weight":
-		return b.SelectWeightedResponse(responseSet)
+		return nil, b.SelectRoundRobinResponse(responseSet)
+	case "weighted":
+		return nil, b.SelectWeightedResponse(responseSet)
 	case "random":
-		return b.SelectRandomResponse(responseSet)
+		return nil, b.SelectRandomResponse(responseSet)
+	case "weighted random with bs":
+		return nil, b.SelectRandomWeightedResponse(responseSet)
 	default:
-		return responseSet.Responses[0] // Default to the first response if choice is invalid
+		return fmt.Errorf("incorrect choice"), entities.Response{} // Default to the first response if choice is invalid
 	}
 }
 
@@ -73,4 +76,27 @@ func (b *Balancer) SelectRandomResponse(responseSet entities.ResponseSet) entiti
 
 	randValue := rand.Intn(len(responseSet.Responses))
 	return responseSet.Responses[randValue]
+}
+
+// SelectRandomWeightedResponse realize Weighted random selection
+func (b *Balancer) SelectRandomWeightedResponse(responseSet entities.ResponseSet) entities.Response {
+	if len(responseSet.Responses) == 0 {
+		return entities.Response{}
+	}
+
+	totalWeight := 0
+	for _, response := range responseSet.Responses {
+		totalWeight += response.Weight
+	}
+
+	randValue := rand.Intn(totalWeight)
+	cumulativeWeight := 0
+	for _, response := range responseSet.Responses {
+		cumulativeWeight += response.Weight
+		if randValue < cumulativeWeight {
+			return response
+		}
+	}
+
+	return responseSet.Responses[0]
 }

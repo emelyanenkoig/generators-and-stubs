@@ -166,13 +166,17 @@ func (s *FastHTTPServer) RouteHandlerFastHTTP(ctx *fasthttp.RequestCtx) {
 			continue
 		}
 
-		response := s.Balancer.SelectResponse(pathConfig.ResponseSet)
+		err, response := s.Balancer.SelectResponse(pathConfig.ResponseSet)
+		if err != nil {
+			ctx.SetStatusCode(fasthttp.StatusBadRequest)
+			s.logger.Error("Error selecting response", zap.Error(err))
+		}
 		for key, value := range response.Headers {
 			ctx.Response.Header.Set(key, value)
 		}
 		time.Sleep(time.Duration(response.Delay) * time.Millisecond)
 		ctx.SetStatusCode(fasthttp.StatusOK)
-		_, err := ctx.WriteString(response.Body)
+		_, err = ctx.WriteString(response.Body)
 		if err != nil {
 			s.logger.Error("Failed to write response", zap.Error(err))
 		}

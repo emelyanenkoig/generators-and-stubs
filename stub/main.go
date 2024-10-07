@@ -1,11 +1,9 @@
 package main
 
 import (
-	"fmt"
 	"gns/stub/env"
 	"gns/stub/log"
 	"gns/stub/server/control"
-	"go.uber.org/zap"
 	"runtime"
 	"sync"
 )
@@ -18,11 +16,6 @@ func main() {
 	defer logger.Sync()
 
 	controlServer := control.NewControlServer(f)
-
-	err := controlServer.LoadServerConfig(fmt.Sprintf("%s", f.ResponseFilePath))
-	if err != nil {
-		logger.Fatal("Error loading Server Config:", zap.Error(err))
-	}
 
 	var wg sync.WaitGroup
 	wg.Add(1)

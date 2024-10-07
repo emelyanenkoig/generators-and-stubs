@@ -48,7 +48,9 @@ func (s *NetHttpServer) InitManagedServer() {
 	s.router = mux.NewRouter()
 
 	for _, pathConfig := range s.Config.Paths {
-		s.router.HandleFunc(pathConfig.Path, s.routeHandler).Methods(http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete)
+		s.logger.Debug("Setting route", zap.String("path", pathConfig.Path))
+		s.router.HandleFunc(pathConfig.Path, s.routeHandler).
+			Methods(http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete)
 	}
 
 	s.router.Use(s.serverAccessControlMiddlewareNetHttp) // middleware
@@ -80,7 +82,7 @@ func (s *NetHttpServer) RunManagedServer() {
 		if err != nil {
 			s.logger.Fatal("Error starting net/http server", zap.Error(err))
 		}
-	case managed.HTTP11:
+	default:
 		err := s.server.ListenAndServe()
 		if err != nil {
 			s.logger.Fatal("Error starting net/http server", zap.Error(err))
@@ -116,6 +118,8 @@ func (s *NetHttpServer) SetConfig(config entities.ServerConfig) {
 	defer s.mu.Unlock()
 	s.logger.Debug("Managed server config is updated", zap.Any("config", config))
 	s.Config = config
+
+	s.UpdateRoutes()
 }
 
 func (s *NetHttpServer) GetTimeSinceStart() time.Time {
@@ -139,13 +143,18 @@ func (s *NetHttpServer) routeHandler(w http.ResponseWriter, r *http.Request) {
 		if pathConfig.Path != path {
 			continue
 		}
-		response := s.Balancer.SelectResponse(pathConfig.ResponseSet) // Select response (round-robin or weighted)
+		err, response := s.Balancer.SelectResponse(pathConfig.ResponseSet) // Select response (round-robin or weighted)
+		if err != nil {
+			http.Error(w, "invalid choice", http.StatusBadRequest)
+			s.logger.Error("invalid choice", zap.Error(err))
+			return
+		}
 		for key, value := range response.Headers {
 			w.Header().Set(key, value)
 		}
 
 		time.Sleep(time.Duration(response.Delay) * time.Millisecond)
-		_, err := w.Write([]byte(response.Body))
+		_, err = w.Write([]byte(response.Body))
 		r.Body.Close()
 		if err != nil {
 			return
@@ -221,4 +230,23 @@ func (s *NetHttpServer) setProtocolOfServer() {
 	default:
 		s.logger.Info("Using HTTP/1.1 proto")
 	}
+}
+
+func (s *NetHttpServer) UpdateRoutes() {
+	// Очистка текущих маршрутов
+	s.router = mux.NewRouter()
+
+	// Добавление новых маршрутов из обновленной конфигурации
+	for _, pathConfig := range s.Config.Paths {
+		s.logger.Debug("Setting updated route", zap.String("path", pathConfig.Path))
+		s.router.HandleFunc(pathConfig.Path, s.routeHandler).
+			Methods(http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete)
+	}
+
+	// Повторное добавление middleware
+	s.router.Use(s.serverAccessControlMiddlewareNetHttp)
+
+	// Применение обновленного роутера
+	s.server.Handler = s.router
+	s.logger.Info("Routes updated successfully")
 }

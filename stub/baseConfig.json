@@ -3,7 +3,7 @@
     {
       "path": "/",
       "responseSet": {
-        "choice": "Round-robin | weight",
+        "choice": "round-robin",
         "responses": [
           {
             "weight": 0,
@@ -11,7 +11,23 @@
             "headers": {
               "content-type" : "text/html"
             },
-            "body": "keklol"
+            "body": "Hello Round-robin"
+          }
+        ]
+      }
+    },
+    {
+      "path": "/tesst",
+      "responseSet": {
+        "choice": "weighted",
+        "responses": [
+          {
+            "weight": 1,
+            "delay": 0,
+            "headers": {
+              "content-type" : "text/html"
+            },
+            "body": "Hello weighted"
           }
         ]
       }

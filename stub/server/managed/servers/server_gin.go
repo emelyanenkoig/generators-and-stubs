@@ -57,7 +57,11 @@ func (s *GinServer) InitManagedServer() {
 			if pathConfig.Path != c.Request.URL.Path {
 				continue
 			}
-			response := s.Balancer.SelectResponse(pathConfig.ResponseSet)
+			err, response := s.Balancer.SelectResponse(pathConfig.ResponseSet)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, "incorrect choice of responses")
+				s.logger.Error("incorrect choice of responses", zap.Error(err))
+			}
 			for key, value := range response.Headers {
 				c.Header(key, value)
 			}
@@ -67,6 +71,7 @@ func (s *GinServer) InitManagedServer() {
 		}
 
 		c.JSON(http.StatusNotFound, "Path not found")
+		s.logger.Error("Path not found")
 	})
 
 	s.server = &http.Server{
