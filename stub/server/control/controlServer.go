@@ -1,7 +1,6 @@
 package control
 
 import (
-	"encoding/json"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"gns/stub/env"
@@ -11,7 +10,6 @@ import (
 	"gns/stub/server/managed/servers"
 	"go.uber.org/zap"
 	"net/http"
-	"os"
 	"sync"
 	"time"
 )
@@ -176,23 +174,4 @@ func (s *ControlServer) InitManagedServer() {
 
 func (s *ControlServer) RunManagedServer() {
 	s.ManagedServer.RunManagedServer() // Запуск сервера
-}
-
-// Load initial ManagedServer configuration from file
-func (s *ControlServer) LoadServerConfig(filePath string) error {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	decoder := json.NewDecoder(file)
-	newConfig := entities.ServerConfig{}
-	err = decoder.Decode(&newConfig)
-	if err != nil {
-		return err
-	}
-	s.ManagedServer.SetConfig(newConfig)
-	s.log.Debug("Loaded config from", zap.String("config", filePath))
-	return nil
 }

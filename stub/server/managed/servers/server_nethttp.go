@@ -1,6 +1,7 @@
 package servers
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/gorilla/mux"
 	"gns/stub/env"
@@ -10,36 +11,39 @@ import (
 	"gns/stub/server/managed/entities"
 	"go.uber.org/zap"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 )
 
 // реализовать get active conns
 type NetHttpServer struct {
-	Config    entities.ServerConfig
-	Balancer  *balancing.Balancer
-	server    *http.Server
-	router    *mux.Router
-	mu        sync.RWMutex
-	isRunning bool
-	Addr      string
-	Port      string
-	reqCount  uint
-	rpsMu     sync.Mutex
-	startTime time.Time
-	logger    *zap.Logger
-	proto     string
-	certFile  string
-	keyFile   string
+	Config         entities.ServerConfig
+	Balancer       *balancing.Balancer
+	server         *http.Server
+	router         *mux.Router
+	mu             sync.RWMutex
+	isRunning      bool
+	Addr           string
+	Port           string
+	reqCount       uint
+	rpsMu          sync.Mutex
+	startTime      time.Time
+	logger         *zap.Logger
+	proto          string
+	certFile       string
+	keyFile        string
+	baseConfigPath string
 }
 
 func NewNetHttpServer(env env.Environment) *NetHttpServer {
 	return &NetHttpServer{
-		Addr:     env.ServerAddr,
-		Port:     env.ServerPort,
-		Balancer: balancing.InitBalancer(),
-		logger:   log.InitLogger(env.LogLevel),
-		proto:    env.ProtocolVersion,
+		Addr:           env.ServerAddr,
+		Port:           env.ServerPort,
+		Balancer:       balancing.InitBalancer(),
+		logger:         log.InitLogger(env.LogLevel),
+		proto:          env.ProtocolVersion,
+		baseConfigPath: env.ResponseFilePath,
 	}
 }
 
@@ -64,7 +68,7 @@ func (s *NetHttpServer) InitManagedServer() {
 		MaxHeaderBytes: 1 << 20,
 	}
 	s.setProtocolOfServer()
-
+	s.LoadServerConfig(s.baseConfigPath)
 }
 
 func (s *NetHttpServer) RunManagedServer() {
@@ -132,26 +136,6 @@ func (s *NetHttpServer) SetConfig(config entities.ServerConfig) error {
 
 }
 
-func (s *NetHttpServer) isValidConfig(c *entities.ServerConfig) error {
-	for _, path := range c.Paths {
-		if _, exist := balancing.ValidStrategy[path.ResponseSet.Choice]; !exist {
-			return fmt.Errorf("invalid balancing strategy: %s", path.ResponseSet.Choice)
-		}
-
-		if len(path.ResponseSet.Responses) == 0 {
-			return fmt.Errorf("no responses in path: %s", path.ResponseSet.Responses)
-		}
-
-		for _, response := range path.ResponseSet.Responses {
-			if response.Weight < 0 || response.Delay < 0 {
-				return fmt.Errorf("invalid weight or delay in path: weight: %s, delay: %s", response.Weight, response.Delay)
-			}
-
-		}
-	}
-	return nil
-
-}
 func (s *NetHttpServer) GetTimeSinceStart() time.Time {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -263,7 +247,6 @@ func (s *NetHttpServer) setProtocolOfServer() {
 }
 
 func (s *NetHttpServer) UpdateRoutes() {
-	// Очистка текущих маршрутов
 	s.router = mux.NewRouter()
 
 	// Добавление новых маршрутов из обновленной конфигурации
@@ -279,4 +262,47 @@ func (s *NetHttpServer) UpdateRoutes() {
 	// Применение обновленного роутера
 	s.server.Handler = s.router
 	s.logger.Info("Routes updated successfully")
+}
+
+func (s *NetHttpServer) isValidConfig(c *entities.ServerConfig) error {
+	for _, path := range c.Paths {
+		if _, exist := balancing.ValidStrategy[path.ResponseSet.Choice]; !exist {
+			return fmt.Errorf("invalid balancing strategy: %s", path.ResponseSet.Choice)
+		}
+
+		if len(path.ResponseSet.Responses) == 0 {
+			return fmt.Errorf("no responses in path: %s", path.ResponseSet.Responses)
+		}
+
+		for _, response := range path.ResponseSet.Responses {
+			if response.Weight < 0 || response.Delay < 0 {
+				return fmt.Errorf("invalid weight or delay in path: weight: %s, delay: %s", response.Weight, response.Delay)
+			}
+
+		}
+	}
+	return nil
+
+}
+
+// Load initial ManagedServer configuration from file
+func (s *NetHttpServer) LoadServerConfig(filePath string) error {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	decoder := json.NewDecoder(file)
+	newConfig := entities.ServerConfig{}
+	err = decoder.Decode(&newConfig)
+	if err != nil {
+		return err
+	}
+	err = s.SetConfig(newConfig)
+	if err != nil {
+		return err
+	}
+	s.logger.Debug("Loaded config from", zap.String("config", filePath))
+	return nil
 }
