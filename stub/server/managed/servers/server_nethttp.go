@@ -116,7 +116,7 @@ func (s *NetHttpServer) GetConfig() entities.ServerConfig {
 func (s *NetHttpServer) SetConfig(config entities.ServerConfig) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.isValidConfigChoice() {
+	if s.isValidConfigChoice(&config) {
 		s.Config = config
 		s.UpdateRoutes()
 		s.logger.Debug("Managed server config is updated", zap.Any("config", config))
@@ -127,9 +127,9 @@ func (s *NetHttpServer) SetConfig(config entities.ServerConfig) error {
 
 }
 
-func (s *NetHttpServer) isValidConfigChoice() bool {
+func (s *NetHttpServer) isValidConfigChoice(c *entities.ServerConfig) bool {
 
-	for _, path := range s.Config.Paths {
+	for _, path := range c.Paths {
 		switch path.ResponseSet.Choice {
 		case balancing.Weighted:
 			continue
