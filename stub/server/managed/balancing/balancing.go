@@ -13,6 +13,10 @@ const (
 	WeightedRandomWithBinarySearch = "weighted random with bs"
 )
 
+var (
+	ValidStrategy = map[string]struct{}{RoundRobin: {}, Weighted: {}, Random: {}, WeightedRandomWithBinarySearch: {}}
+)
+
 type Balancer struct {
 	RRobinIndex int
 }
@@ -40,7 +44,7 @@ func (b *Balancer) SelectResponse(responseSet entities.ResponseSet) (error, enti
 	}
 }
 
-// SelectRoundRobinResponse realize Round-robin selection
+// SelectRoundRobinResponse realize RoundRobin selection
 func (b *Balancer) SelectRoundRobinResponse(responseSet entities.ResponseSet) entities.Response {
 	if len(responseSet.Responses) == 0 {
 		return entities.Response{}
@@ -75,7 +79,7 @@ func (b *Balancer) SelectWeightedResponse(responseSet entities.ResponseSet) enti
 	return responseSet.Responses[0]
 }
 
-// SelectRandomResponse  realize full random selection
+// SelectRandomResponse  realize full Random selection
 func (b *Balancer) SelectRandomResponse(responseSet entities.ResponseSet) entities.Response {
 	if len(responseSet.Responses) == 0 {
 		return entities.Response{}
@@ -85,7 +89,8 @@ func (b *Balancer) SelectRandomResponse(responseSet entities.ResponseSet) entiti
 	return responseSet.Responses[randValue]
 }
 
-// SelectRandomWeightedResponse realize Weighted random selection
+// SelectRandomWeightedResponse TODO need to realize algorithm
+// SelectRandomWeightedResponse realize WeightedRandomWithBinarySearch selection
 func (b *Balancer) SelectRandomWeightedResponse(responseSet entities.ResponseSet) entities.Response {
 	if len(responseSet.Responses) == 0 {
 		return entities.Response{}

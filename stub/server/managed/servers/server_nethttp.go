@@ -116,34 +116,37 @@ func (s *NetHttpServer) GetConfig() entities.ServerConfig {
 func (s *NetHttpServer) SetConfig(config entities.ServerConfig) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.isValidConfigChoice(&config) {
-		s.Config = config
-		s.UpdateRoutes()
-		s.logger.Debug("Managed server config is updated", zap.Any("config", config))
-		return nil
+
+	if err := s.isValidConfig(&config); err != nil {
+		s.logger.Error("Failed to update config, invalid config", zap.Any("error", err))
+		return err
 	}
-	s.logger.Debug("Failed to update config, invalid config", zap.Any("config", config))
-	return fmt.Errorf("invalid config")
+
+	s.Config = config
+	s.UpdateRoutes()
+	s.logger.Debug("Managed server config is updated", zap.Any("config", config))
+	return nil
 
 }
 
-func (s *NetHttpServer) isValidConfigChoice(c *entities.ServerConfig) bool {
-
+func (s *NetHttpServer) isValidConfig(c *entities.ServerConfig) error {
 	for _, path := range c.Paths {
-		switch path.ResponseSet.Choice {
-		case balancing.Weighted:
-			continue
-		case balancing.Random:
-			continue
-		case balancing.RoundRobin:
-			continue
-		case balancing.WeightedRandomWithBinarySearch:
-			continue
-		default:
-			return false
+		if _, exist := balancing.ValidStrategy[path.ResponseSet.Choice]; !exist {
+			return fmt.Errorf("invalid balancing strategy: %s", path.ResponseSet.Choice)
+		}
+
+		if len(path.ResponseSet.Responses) == 0 {
+			return fmt.Errorf("no responses in path: %s", path.ResponseSet.Responses)
+		}
+
+		for _, response := range path.ResponseSet.Responses {
+			if response.Weight < 0 || response.Delay < 0 {
+				return fmt.Errorf("invalid weight or delay in path: weight: %s, delay: %s", response.Weight, response.Delay)
+			}
+
 		}
 	}
-	return true
+	return nil
 
 }
 func (s *NetHttpServer) GetTimeSinceStart() time.Time {
