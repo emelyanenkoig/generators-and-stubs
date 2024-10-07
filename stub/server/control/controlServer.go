@@ -80,7 +80,13 @@ func (s *ControlServer) RunControlServer() {
 func (s *ControlServer) GetControlServerConfig(c *gin.Context) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	c.JSON(http.StatusOK, s.ManagedServer.GetConfig())
+	config, exist := s.ManagedServer.GetConfig()
+	if !exist {
+		c.JSON(http.StatusNotFound, "null")
+		return
+	}
+	c.JSON(http.StatusOK, config)
+
 }
 
 func (s *ControlServer) UpdateControlServerConfig(c *gin.Context) {
@@ -104,7 +110,12 @@ func (s *ControlServer) UpdateControlServerConfig(c *gin.Context) {
 func (s *ControlServer) DeleteControlServerConfig(c *gin.Context) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.ManagedServer.SetConfig(entities.ServerConfig{})
+	err := s.ManagedServer.SetConfig(entities.ServerConfig{})
+	if err != nil {
+		c.String(http.StatusBadRequest, err.Error())
+		s.log.Error("Failed to delete configuration", zap.Error(err))
+		return
+	}
 	c.String(http.StatusOK, "Configuration deleted successfully")
 	s.log.Debug("Managed server config deleted")
 }

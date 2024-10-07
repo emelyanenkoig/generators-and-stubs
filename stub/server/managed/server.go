@@ -10,7 +10,7 @@ type ManagedServerInterface interface {
 	RunManagedServer()  // Запуск сервера
 	IsRunning() bool
 	SetRunning(v bool)
-	GetConfig() entities.ServerConfig
+	GetConfig() (entities.ServerConfig, bool)
 	SetConfig(config entities.ServerConfig) error
 	GetTimeSinceStart() time.Time
 	GetReqSinceStart() uint

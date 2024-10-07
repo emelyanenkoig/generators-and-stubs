@@ -106,11 +106,14 @@ func (s *NetHttpServer) SetRunning(v bool) {
 	s.isRunning = v
 }
 
-func (s *NetHttpServer) GetConfig() entities.ServerConfig {
+func (s *NetHttpServer) GetConfig() (entities.ServerConfig, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	s.logger.Debug("Get managed server config", zap.Any("config", s.Config))
-	return s.Config
+	if len(s.Config.Paths) == 0 {
+		return entities.ServerConfig{}, false
+	}
+	return s.Config, true
 }
 
 func (s *NetHttpServer) SetConfig(config entities.ServerConfig) error {
