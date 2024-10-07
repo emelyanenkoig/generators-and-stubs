@@ -33,10 +33,10 @@ func NewControlServer(env env.Environment) *ControlServer {
 		log:  log.InitLogger(env.LogLevel),
 	}
 	switch env.ManagedServerType {
-	case managed.ServerTypeFastHTTP:
-		cs.ManagedServer = servers.NewFastHTTPServer(env)
-	case managed.ServerTypeGin:
-		cs.ManagedServer = servers.NewGinServer(env)
+	//case managed.ServerTypeFastHTTP:
+	//	cs.ManagedServer = servers.NewFastHTTPServer(env)
+	//case managed.ServerTypeGin:
+	//	cs.ManagedServer = servers.NewGinServer(env)
 	default:
 		cs.ManagedServer = servers.NewNetHttpServer(env)
 	}
@@ -92,7 +92,11 @@ func (s *ControlServer) UpdateControlServerConfig(c *gin.Context) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.ManagedServer.SetConfig(newConfig)
+	err := s.ManagedServer.SetConfig(newConfig)
+	if err != nil {
+		c.String(http.StatusBadRequest, err.Error())
+		return
+	}
 	c.String(http.StatusOK, "The configuration has been successfully applied")
 	s.log.Debug("The configuration of managed server has been successfully applied")
 }

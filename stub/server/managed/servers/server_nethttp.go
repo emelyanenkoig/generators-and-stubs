@@ -113,16 +113,17 @@ func (s *NetHttpServer) GetConfig() entities.ServerConfig {
 	return s.Config
 }
 
-func (s *NetHttpServer) SetConfig(config entities.ServerConfig) {
+func (s *NetHttpServer) SetConfig(config entities.ServerConfig) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.isValidConfigChoice() {
 		s.Config = config
 		s.UpdateRoutes()
 		s.logger.Debug("Managed server config is updated", zap.Any("config", config))
-		return
+		return nil
 	}
 	s.logger.Debug("Failed to update config, invalid config", zap.Any("config", config))
+	return fmt.Errorf("invalid config")
 
 }
 

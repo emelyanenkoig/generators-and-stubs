@@ -11,7 +11,7 @@ type ManagedServerInterface interface {
 	IsRunning() bool
 	SetRunning(v bool)
 	GetConfig() entities.ServerConfig
-	SetConfig(config entities.ServerConfig)
+	SetConfig(config entities.ServerConfig) error
 	GetTimeSinceStart() time.Time
 	GetReqSinceStart() uint
 }
